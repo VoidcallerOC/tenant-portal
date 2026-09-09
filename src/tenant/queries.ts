@@ -22,5 +22,9 @@ export async function getTenantDocuments(db: Db, userId: string) {
 
 export function tenantDashboard(context: NonNullable<Awaited<ReturnType<typeof getTenantContext>>>) {
   const activeLease = context.leases.find(({ lease }) => lease.status === 'ACTIVE') ?? context.lease;
-  return { tenant: context.tenant, user: context.user, lease: activeLease, openMaintenanceCount: context.maintenance.filter(({ request }) => request.status === 'OPEN' || request.status === 'IN_PROGRESS').length, recentMaintenance: context.maintenance.slice(0, 5) };
+  return { tenant: context.tenant, user: publicUser(context.user), lease: activeLease, openMaintenanceCount: context.maintenance.filter(({ request }) => request.status === 'OPEN' || request.status === 'IN_PROGRESS').length, recentMaintenance: context.maintenance.slice(0, 5) };
+}
+
+export function publicUser(user: Pick<typeof users.$inferSelect, 'id' | 'organizationId' | 'email' | 'firstName' | 'lastName' | 'role'>) {
+  return { id: user.id, organizationId: user.organizationId, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role };
 }
