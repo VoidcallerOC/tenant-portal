@@ -44,8 +44,8 @@ Running `pnpm db:seed` creates or updates these development accounts:
 
 | Role | Email | Password |
 | --- | --- | --- |
-| ADMIN | `admin@harborview.example` | `AdminDemoPassword!2026` |
-| MANAGER | `manager@harborview.example` | `ManagerDemoPassword!2026` |
+| ADMIN | `admin@test.example` | `AdminDemoPassword!2026` |
+| MANAGER | `manager@test.example` | `ManagerDemoPassword!2026` |
 | TENANT | `jamie@example.test` | `TenantDemoPassword!2026` |
 | TENANT | `riley@example.test` | `TenantTwoDemoPassword!2026` |
 
