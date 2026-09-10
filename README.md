@@ -65,7 +65,7 @@ Tenant APIs never accept a tenant ID from the client. They derive the tenant rec
 
 Management can assign a tenant to an organization-owned unit and create an active or pending lease from the tenant directory. The server verifies both tenant and unit ownership, rejects conflicting active leases, and marks an actively leased unit occupied.
 
-Payments are intentionally outside this MVP scope and will be implemented as a separate future phase.
+The management and tenant consoles include a non-functional **Payments** placeholder so the future billing workflow has a reserved location in the UI. It currently performs no payment actions, stores no payment data, exposes no payment API, and has no Stripe dependency. When payment work is approved, the planned configuration points are `STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, and `STRIPE_WEBHOOK_SECRET`; these must be supplied through the deployment environment rather than committed to the repository.
 
 ## Phase 1 status
 
