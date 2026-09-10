@@ -234,3 +234,21 @@ export function createApp(databaseUrl?: string) {
 }
 async function tenantForUser(db: ReturnType<typeof createDb>['db'], userId: string) { const rows = await db.select({ tenant: tenants }).from(tenants).innerJoin(users, eq(users.id, tenants.userId)).where(and(eq(tenants.userId, userId), eq(tenants.organizationId, users.organizationId))).limit(1); return rows[0]?.tenant; }
 function publicUser(user: { id: string; email: string; firstName: string; lastName: string; role: string }) { return { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role }; }
+
+let vercelApp: ReturnType<typeof createApp>['app'] | undefined;
+let vercelInitializationError: unknown;
+
+export default function vercelHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (vercelInitializationError) throw vercelInitializationError;
+    vercelApp ??= createApp().app;
+    return vercelApp(req, res, next);
+  } catch (error) {
+    vercelInitializationError = error;
+    console.error(error);
+    if (error instanceof Error && error.message === 'DATABASE_URL is required to connect to the database.') {
+      return res.status(503).json({ error: 'Database configuration is required.' });
+    }
+    return res.status(500).json({ error: 'Application initialization failed.' });
+  }
+}
