@@ -3,11 +3,11 @@ import type { Db } from '../db/client.js';
 import { documents, leases, maintenanceRequests, properties, tenants, units, users } from '../db/schema.js';
 
 export async function getTenantContext(db: Db, userId: string) {
-  const tenantRows = await db.select({ tenant: tenants, user: users }).from(tenants).innerJoin(users, eq(users.id, tenants.userId)).where(eq(tenants.userId, userId)).limit(1);
+  const tenantRows = await db.select({ tenant: tenants, user: users }).from(tenants).innerJoin(users, eq(users.id, tenants.userId)).where(and(eq(tenants.userId, userId), eq(tenants.organizationId, users.organizationId))).limit(1);
   const identity = tenantRows[0];
   if (!identity) return null;
-  const leaseRows = await db.select({ lease: leases, unit: units, property: properties }).from(leases).innerJoin(units, eq(units.id, leases.unitId)).innerJoin(properties, eq(properties.id, units.propertyId)).where(eq(leases.tenantId, identity.tenant.id)).orderBy(desc(leases.startDate));
-  const requestRows = await db.select({ request: maintenanceRequests, unit: units, property: properties }).from(maintenanceRequests).innerJoin(units, eq(units.id, maintenanceRequests.unitId)).innerJoin(properties, eq(properties.id, units.propertyId)).where(eq(maintenanceRequests.tenantId, identity.tenant.id)).orderBy(desc(maintenanceRequests.createdAt));
+  const leaseRows = await db.select({ lease: leases, unit: units, property: properties }).from(leases).innerJoin(units, eq(units.id, leases.unitId)).innerJoin(properties, eq(properties.id, units.propertyId)).where(and(eq(leases.tenantId, identity.tenant.id), eq(properties.organizationId, identity.tenant.organizationId))).orderBy(desc(leases.startDate));
+  const requestRows = await db.select({ request: maintenanceRequests, unit: units, property: properties }).from(maintenanceRequests).innerJoin(units, eq(units.id, maintenanceRequests.unitId)).innerJoin(properties, eq(properties.id, units.propertyId)).where(and(eq(maintenanceRequests.tenantId, identity.tenant.id), eq(properties.organizationId, identity.tenant.organizationId))).orderBy(desc(maintenanceRequests.createdAt));
   return { ...identity, lease: leaseRows[0] ?? null, leases: leaseRows, maintenance: requestRows };
 }
 
@@ -26,5 +26,5 @@ export function tenantDashboard(context: NonNullable<Awaited<ReturnType<typeof g
 }
 
 export function publicUser(user: Pick<typeof users.$inferSelect, 'id' | 'organizationId' | 'email' | 'firstName' | 'lastName' | 'role'>) {
-  return { id: user.id, organizationId: user.organizationId, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role };
+  return { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role };
 }

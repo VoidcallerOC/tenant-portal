@@ -11,7 +11,7 @@ export async function getDashboard(db: Db, organizationId: string) {
     db.select({ request: maintenanceRequests, tenant: tenants, user: { id: users.id, organizationId: users.organizationId, email: users.email, firstName: users.firstName, lastName: users.lastName, role: users.role }, unit: units, property: properties }).from(maintenanceRequests)
       .innerJoin(tenants, eq(tenants.id, maintenanceRequests.tenantId)).innerJoin(users, eq(users.id, tenants.userId))
       .innerJoin(units, eq(units.id, maintenanceRequests.unitId)).innerJoin(properties, eq(properties.id, units.propertyId))
-      .where(eq(tenants.organizationId, organizationId)).orderBy(desc(maintenanceRequests.createdAt)).limit(5),
+      .where(and(eq(tenants.organizationId, organizationId), eq(properties.organizationId, organizationId))).orderBy(desc(maintenanceRequests.createdAt)).limit(5),
     db.select({ tenant: tenants, user: { id: users.id, organizationId: users.organizationId, email: users.email, firstName: users.firstName, lastName: users.lastName, role: users.role } }).from(tenants).innerJoin(users, eq(users.id, tenants.userId)).where(eq(tenants.organizationId, organizationId)).orderBy(desc(tenants.createdAt)).limit(5),
   ]);
 
@@ -43,10 +43,10 @@ export async function getPropertyDetail(db: Db, organizationId: string, property
   const propertyUnits = await db.select().from(units).where(eq(units.propertyId, propertyId)).orderBy(asc(units.unitNumber));
   const tenantsForProperty = await db.select({ tenant: tenants, user: { id: users.id, organizationId: users.organizationId, email: users.email, firstName: users.firstName, lastName: users.lastName, role: users.role }, lease: leases, unit: units }).from(leases)
     .innerJoin(tenants, eq(tenants.id, leases.tenantId)).innerJoin(users, eq(users.id, tenants.userId)).innerJoin(units, eq(units.id, leases.unitId))
-    .where(and(eq(units.propertyId, propertyId), eq(tenants.organizationId, organizationId)));
-  const requests = await db.select({ request: maintenanceRequests, tenant: tenants, user: { id: users.id, organizationId: users.organizationId, email: users.email, firstName: users.firstName, lastName: users.lastName, role: users.role }, unit: units }).from(maintenanceRequests)
-    .innerJoin(tenants, eq(tenants.id, maintenanceRequests.tenantId)).innerJoin(users, eq(users.id, tenants.userId)).innerJoin(units, eq(units.id, maintenanceRequests.unitId))
-    .where(and(eq(units.propertyId, propertyId), eq(tenants.organizationId, organizationId))).orderBy(desc(maintenanceRequests.createdAt));
+    .where(and(eq(units.propertyId, propertyId), eq(tenants.organizationId, organizationId), eq(users.organizationId, organizationId)));
+    const requests = await db.select({ request: maintenanceRequests, tenant: tenants, user: { id: users.id, organizationId: users.organizationId, email: users.email, firstName: users.firstName, lastName: users.lastName, role: users.role }, unit: units }).from(maintenanceRequests)
+    .innerJoin(tenants, eq(tenants.id, maintenanceRequests.tenantId)).innerJoin(users, eq(users.id, tenants.userId)).innerJoin(units, eq(units.id, maintenanceRequests.unitId)).innerJoin(properties, eq(properties.id, units.propertyId))
+    .where(and(eq(units.propertyId, propertyId), eq(tenants.organizationId, organizationId), eq(users.organizationId, organizationId), eq(properties.organizationId, organizationId))).orderBy(desc(maintenanceRequests.createdAt));
   return { property, units: propertyUnits, tenants: tenantsForProperty, maintenance: requests };
 }
 

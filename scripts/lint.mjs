@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 
-const files = ['client/admin.js', 'client/tenant.js'];
+const files = ['client/admin.js', 'client/tenant.js', 'client/login.js'];
 const failures = [];
 
 for (const file of files) {
@@ -9,7 +9,7 @@ for (const file of files) {
   if (result.status !== 0) failures.push(`${file}: ${result.stderr.trim()}`);
 }
 
-for (const file of ['client/admin.html', 'client/tenant.html']) {
+for (const file of ['client/admin.html', 'client/tenant.html', 'client/login.html']) {
   const source = await readFile(file, 'utf8');
   if (!source.trim().startsWith('<!doctype html>')) failures.push(`${file}: missing doctype`);
   if (!source.includes('lang="en"')) failures.push(`${file}: missing document language`);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { propertyCreateInput, unitCreateInput, unitUpdateInput } from '../src/management/validation.js';
+import { leaseCreateInput, propertyCreateInput, tenantCreateInput, unitCreateInput, unitUpdateInput } from '../src/management/validation.js';
 import { requireRole } from '../src/auth/authorization.js';
 
 describe('management CRUD validation', () => {
@@ -17,6 +17,19 @@ describe('management CRUD validation', () => {
   it('supports partial unit updates without allowing arbitrary fields', () => {
     expect(unitUpdateInput.parse({ status: 'MAINTENANCE' })).toEqual({ status: 'MAINTENANCE' });
     expect(() => unitUpdateInput.parse({ organizationId: 'other-org' })).toThrow();
+  });
+
+  it('validates tenant account creation without accepting organization ownership', () => {
+    const tenant = tenantCreateInput.parse({ email: 'new@example.test', password: 'SecureTenantPassword!2026', firstName: 'Taylor', lastName: 'Morgan' });
+    expect(tenant.email).toBe('new@example.test');
+    expect(() => tenantCreateInput.parse({ email: 'new@example.test', password: 'SecureTenantPassword!2026', firstName: 'Taylor', lastName: 'Morgan', organizationId: 'other-org' })).toThrow();
+  });
+
+  it('validates lease assignment dates and rejects organization substitution', () => {
+    const lease = leaseCreateInput.parse({ unitId: '00000000-0000-0000-0000-000000000001', startDate: '2026-09-01', endDate: '', monthlyRent: '1800.00', status: 'ACTIVE' });
+    expect(lease.monthlyRent).toBe(1800);
+    expect(lease.endDate).toBeNull();
+    expect(() => leaseCreateInput.parse({ unitId: '00000000-0000-0000-0000-000000000001', startDate: '2026-09-10', endDate: '2026-09-01', monthlyRent: 1800, organizationId: 'other-org' })).toThrow();
   });
 });
 

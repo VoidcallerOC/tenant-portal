@@ -2,17 +2,18 @@ import 'dotenv/config';
 import { fileURLToPath } from 'node:url';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import { createDb } from './db/client.js';
 import { documents, leases, maintenanceComments, maintenanceRequests, properties, tenants, units, users } from './db/schema.js';
 import { AuthError, requireAuthenticated, requireRole } from './auth/authorization.js';
+import { hashPassword } from './auth/password.js';
 import { authenticate, createSession, getUserForSession, revokeSession, SESSION_COOKIE } from './auth/service.js';
 import { getDashboard, getPropertyDetail, listProperties } from './management/queries.js';
-import { propertyCreateInput, unitCreateInput, unitUpdateInput, uuidParam } from './management/validation.js';
+import { leaseCreateInput, propertyCreateInput, tenantCreateInput, unitCreateInput, unitUpdateInput, uuidParam } from './management/validation.js';
 import { getTenantContext, getTenantDocuments, tenantDashboard } from './tenant/queries.js';
 import { tenantProfileUpdateInput } from './tenant/validation.js';
 
-const loginInput = z.object({ email: z.string().email(), password: z.string().min(1) });
+const loginInput = z.object({ email: z.string().trim().email(), password: z.string().min(1) }).strict();
 const idInput = z.string().uuid();
 const tenantMaintenanceInput = z.object({
   title: z.string().trim().min(1).max(200),
@@ -26,7 +27,8 @@ type AuthenticatedRequest = Request & { authUser: NonNullable<Awaited<ReturnType
 
 function readCookie(req: Request, name: string) {
   const pair = req.headers.cookie?.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${name}=`));
-  return pair ? decodeURIComponent(pair.slice(name.length + 1)) : undefined;
+  if (!pair) return undefined;
+  try { return decodeURIComponent(pair.slice(name.length + 1)); } catch { return undefined; }
 }
 function serializeSessionCookie(value: string, expires: Date) {
   return `${SESSION_COOKIE}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Expires=${expires.toUTCString()}${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`;
@@ -35,16 +37,20 @@ function sendAuthError(error: unknown, res: Response, next: NextFunction) {
   if (error instanceof AuthError) return res.status(error.status).json({ error: error.message });
   return next(error);
 }
+function isUniqueViolation(error: unknown): error is { code: string } {
+  return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === '23505';
+}
 
 export function createApp(databaseUrl?: string) {
   const { db, pool } = createDb(databaseUrl);
   const app = express();
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '100kb' }));
   const clientRoot = fileURLToPath(new URL('../client/', import.meta.url));
   app.use(express.static(clientRoot, { index: false }));
 
-  app.get('/login', (_req, res) => res.status(200).json({ route: '/login', message: 'Submit credentials to POST /login.' }));
+  app.use(express.json({ limit: '100kb' }));
+
+  app.get('/login', (_req, res) => res.sendFile(`${clientRoot}/login.html`));
   app.post('/login', async (req, res, next) => {
     try {
       const input = loginInput.parse(req.body);
@@ -98,16 +104,60 @@ export function createApp(databaseUrl?: string) {
     try { const { propertyId, id } = z.object({ propertyId: z.string().uuid(), id: z.string().uuid() }).parse(req.params); const input = unitUpdateInput.parse(req.body); const owned = await db.select({ unitId: units.id }).from(units).innerJoin(properties, eq(properties.id, units.propertyId)).where(and(eq(units.id, id), eq(units.propertyId, propertyId), eq(properties.organizationId, (req as AuthenticatedRequest).authUser.organizationId))).limit(1); if (!owned[0]) return res.status(404).json({ error: 'Resource not found.' }); const [unit] = await db.update(units).set({ ...input, bathrooms: input.bathrooms === undefined ? undefined : input.bathrooms === null ? null : input.bathrooms.toFixed(2), updatedAt: new Date() }).where(eq(units.id, id)).returning(); return unit ? res.json(unit) : res.status(404).json({ error: 'Resource not found.' }); } catch (error) { return next(error); }
   });
   app.get('/admin/tenants', requireManagement, async (req, res, next) => {
-    try { const organizationId = (req as AuthenticatedRequest).authUser.organizationId; return res.json(await db.select({ tenant: tenants, user: { id: users.id, organizationId: users.organizationId, email: users.email, firstName: users.firstName, lastName: users.lastName, role: users.role }, lease: leases, unit: units, property: properties }).from(tenants).innerJoin(users, eq(users.id, tenants.userId)).leftJoin(leases, eq(leases.tenantId, tenants.id)).leftJoin(units, eq(units.id, leases.unitId)).leftJoin(properties, eq(properties.id, units.propertyId)).where(eq(tenants.organizationId, organizationId)).orderBy(asc(users.lastName), asc(users.firstName))); } catch (error) { return next(error); }
+    try { const organizationId = (req as AuthenticatedRequest).authUser.organizationId; return res.json(await db.select({ tenant: tenants, user: { id: users.id, organizationId: users.organizationId, email: users.email, firstName: users.firstName, lastName: users.lastName, role: users.role }, lease: leases, unit: units, property: properties }).from(tenants).innerJoin(users, eq(users.id, tenants.userId)).leftJoin(leases, eq(leases.tenantId, tenants.id)).leftJoin(units, eq(units.id, leases.unitId)).leftJoin(properties, eq(properties.id, units.propertyId)).where(and(eq(tenants.organizationId, organizationId), eq(users.organizationId, organizationId))).orderBy(asc(users.lastName), asc(users.firstName))); } catch (error) { return next(error); }
   });
   app.get('/admin/tenants/:id', requireManagement, async (req, res, next) => {
-    try { const { id } = uuidParam.parse(req.params); const organizationId = (req as AuthenticatedRequest).authUser.organizationId; const tenantRows = await db.select({ tenant: tenants, user: { id: users.id, organizationId: users.organizationId, email: users.email, firstName: users.firstName, lastName: users.lastName, role: users.role } }).from(tenants).innerJoin(users, eq(users.id, tenants.userId)).where(and(eq(tenants.id, id), eq(tenants.organizationId, organizationId))).limit(1); if (!tenantRows[0]) return res.status(404).json({ error: 'Resource not found.' }); const [leaseRows, requestRows] = await Promise.all([db.select({ lease: leases, unit: units, property: properties }).from(leases).innerJoin(units, eq(units.id, leases.unitId)).innerJoin(properties, eq(properties.id, units.propertyId)).where(eq(leases.tenantId, id)), db.select({ request: maintenanceRequests, unit: units, property: properties }).from(maintenanceRequests).innerJoin(units, eq(units.id, maintenanceRequests.unitId)).innerJoin(properties, eq(properties.id, units.propertyId)).where(eq(maintenanceRequests.tenantId, id))]); return res.json({ ...tenantRows[0], leases: leaseRows, maintenance: requestRows }); } catch (error) { return next(error); }
+    try { const { id } = uuidParam.parse(req.params); const organizationId = (req as AuthenticatedRequest).authUser.organizationId; const tenantRows = await db.select({ tenant: tenants, user: { id: users.id, organizationId: users.organizationId, email: users.email, firstName: users.firstName, lastName: users.lastName, role: users.role } }).from(tenants).innerJoin(users, eq(users.id, tenants.userId)).where(and(eq(tenants.id, id), eq(tenants.organizationId, organizationId), eq(users.organizationId, organizationId))).limit(1); if (!tenantRows[0]) return res.status(404).json({ error: 'Resource not found.' }); const [leaseRows, requestRows] = await Promise.all([db.select({ lease: leases, unit: units, property: properties }).from(leases).innerJoin(units, eq(units.id, leases.unitId)).innerJoin(properties, eq(properties.id, units.propertyId)).where(and(eq(leases.tenantId, id), eq(properties.organizationId, organizationId))), db.select({ request: maintenanceRequests, unit: units, property: properties }).from(maintenanceRequests).innerJoin(units, eq(units.id, maintenanceRequests.unitId)).innerJoin(properties, eq(properties.id, units.propertyId)).where(and(eq(maintenanceRequests.tenantId, id), eq(properties.organizationId, organizationId)))]); return res.json({ ...tenantRows[0], leases: leaseRows, maintenance: requestRows }); } catch (error) { return next(error); }
   });
-  app.get('/admin/properties', requireManagement, async (req, res, next) => { try { const user = (req as AuthenticatedRequest).authUser; return res.json(await db.select().from(properties).where(eq(properties.organizationId, user.organizationId))); } catch (error) { return next(error); } });
-  app.get('/admin/properties/new', requireManagement, (_req, res) => res.json({ route: '/admin/properties/new', method: 'POST' }));
-  app.get('/admin/properties/:id', requireManagement, async (req, res, next) => { try { const id = idInput.parse(req.params.id); const user = (req as AuthenticatedRequest).authUser; const rows = await db.select().from(properties).where(and(eq(properties.id, id), eq(properties.organizationId, user.organizationId))).limit(1); return rows[0] ? res.json(rows[0]) : res.status(404).json({ error: 'Resource not found.' }); } catch (error) { return next(error); } });
-  app.get('/admin/tenants', requireManagement, async (req, res, next) => { try { const user = (req as AuthenticatedRequest).authUser; return res.json(await db.select().from(tenants).where(eq(tenants.organizationId, user.organizationId))); } catch (error) { return next(error); } });
-  app.get('/admin/tenants/:id', requireManagement, async (req, res, next) => { try { const id = idInput.parse(req.params.id); const user = (req as AuthenticatedRequest).authUser; const rows = await db.select().from(tenants).where(and(eq(tenants.id, id), eq(tenants.organizationId, user.organizationId))).limit(1); return rows[0] ? res.json(rows[0]) : res.status(404).json({ error: 'Resource not found.' }); } catch (error) { return next(error); } });
+  app.post('/admin/tenants', requireManagement, async (req, res, next) => {
+    try {
+      const input = tenantCreateInput.parse(req.body);
+      const organizationId = (req as AuthenticatedRequest).authUser.organizationId;
+      const result = await db.transaction(async (tx) => {
+        const [user] = await tx.insert(users).values({ organizationId, email: input.email.toLowerCase(), passwordHash: await hashPassword(input.password), firstName: input.firstName, lastName: input.lastName, role: 'TENANT' }).returning({ id: users.id, organizationId: users.organizationId, email: users.email, firstName: users.firstName, lastName: users.lastName, role: users.role });
+        if (!user) throw new Error('Unable to create tenant user.');
+        const [tenant] = await tx.insert(tenants).values({ userId: user.id, organizationId, phone: input.phone, emergencyName: input.emergencyName, emergencyPhone: input.emergencyPhone }).returning();
+        if (!tenant) throw new Error('Unable to create tenant record.');
+        return { tenant, user };
+      });
+      return res.status(201).json(result);
+    } catch (error) {
+      if (isUniqueViolation(error)) return res.status(409).json({ error: 'A tenant account with this email already exists.' });
+      return next(error);
+    }
+  });
+  app.get('/admin/lease-options', requireManagement, async (req, res, next) => {
+    try {
+      const organizationId = (req as AuthenticatedRequest).authUser.organizationId;
+      const [tenantRows, unitRows] = await Promise.all([
+        db.select({ id: tenants.id, firstName: users.firstName, lastName: users.lastName, email: users.email }).from(tenants).innerJoin(users, eq(users.id, tenants.userId)).where(and(eq(tenants.organizationId, organizationId), eq(users.organizationId, organizationId), eq(users.role, 'TENANT'))).orderBy(asc(users.lastName), asc(users.firstName)),
+        db.select({ id: units.id, unitNumber: units.unitNumber, propertyId: properties.id, propertyName: properties.name }).from(units).innerJoin(properties, eq(properties.id, units.propertyId)).where(eq(properties.organizationId, organizationId)).orderBy(asc(properties.name), asc(units.unitNumber)),
+      ]);
+      return res.json({ tenants: tenantRows, units: unitRows });
+    } catch (error) { return next(error); }
+  });
+  app.post('/admin/tenants/:id/lease', requireManagement, async (req, res, next) => {
+    try {
+      const tenantId = uuidParam.parse(req.params).id;
+      const input = leaseCreateInput.parse(req.body);
+      const organizationId = (req as AuthenticatedRequest).authUser.organizationId;
+      const tenantRows = await db.select({ id: tenants.id }).from(tenants).innerJoin(users, eq(users.id, tenants.userId)).where(and(eq(tenants.id, tenantId), eq(tenants.organizationId, organizationId), eq(users.organizationId, organizationId), eq(users.role, 'TENANT'))).limit(1);
+      if (!tenantRows[0]) return res.status(404).json({ error: 'Tenant not found.' });
+      const unitRows = await db.select({ id: units.id }).from(units).innerJoin(properties, eq(properties.id, units.propertyId)).where(and(eq(units.id, input.unitId), eq(properties.organizationId, organizationId))).limit(1);
+      if (!unitRows[0]) return res.status(404).json({ error: 'Unit not found.' });
+      const existing = await db.select({ id: leases.id }).from(leases).where(and(eq(leases.tenantId, tenantId), eq(leases.status, 'ACTIVE'))).limit(1);
+      if (existing[0] && input.status === 'ACTIVE') return res.status(409).json({ error: 'Tenant already has an active lease.' });
+      const occupied = await db.select({ id: leases.id }).from(leases).where(and(eq(leases.unitId, input.unitId), eq(leases.status, 'ACTIVE'))).limit(1);
+      if (occupied[0] && input.status === 'ACTIVE') return res.status(409).json({ error: 'Unit already has an active lease.' });
+      const result = await db.transaction(async (tx) => {
+        const [lease] = await tx.insert(leases).values({ tenantId, unitId: input.unitId, startDate: input.startDate.toISOString().slice(0, 10), endDate: input.endDate ? input.endDate.toISOString().slice(0, 10) : null, monthlyRent: input.monthlyRent.toFixed(2), securityDeposit: input.securityDeposit === undefined || input.securityDeposit === null ? null : input.securityDeposit.toFixed(2), status: input.status }).returning();
+        if (!lease) throw new Error('Unable to create lease.');
+        if (input.status === 'ACTIVE') await tx.update(units).set({ status: 'OCCUPIED', updatedAt: new Date() }).where(eq(units.id, input.unitId));
+        return lease;
+      });
+      return res.status(201).json(result);
+    } catch (error) { return next(error); }
+  });
   app.get('/admin/maintenance', requireManagement, async (req, res, next) => {
     try {
       const user = (req as AuthenticatedRequest).authUser;
@@ -115,7 +165,7 @@ export function createApp(databaseUrl?: string) {
       const rows = await db.select({ request: maintenanceRequests, tenant: tenants, user: { id: users.id, organizationId: users.organizationId, email: users.email, firstName: users.firstName, lastName: users.lastName, role: users.role }, unit: units, property: properties })
         .from(maintenanceRequests).innerJoin(tenants, eq(tenants.id, maintenanceRequests.tenantId)).innerJoin(users, eq(users.id, tenants.userId))
         .innerJoin(units, eq(units.id, maintenanceRequests.unitId)).innerJoin(properties, eq(properties.id, units.propertyId))
-        .where(and(eq(tenants.organizationId, user.organizationId), ...(filter ? [eq(maintenanceRequests.status, filter)] : [])))
+        .where(and(eq(tenants.organizationId, user.organizationId), eq(users.organizationId, user.organizationId), eq(properties.organizationId, user.organizationId), ...(filter ? [eq(maintenanceRequests.status, filter)] : [])))
         .orderBy(desc(maintenanceRequests.createdAt));
       return res.json(rows);
     } catch (error) { return next(error); }
@@ -126,15 +176,15 @@ export function createApp(databaseUrl?: string) {
       const rows = await db.select({ request: maintenanceRequests, tenant: tenants, user: { id: users.id, organizationId: users.organizationId, email: users.email, firstName: users.firstName, lastName: users.lastName, role: users.role }, unit: units, property: properties })
         .from(maintenanceRequests).innerJoin(tenants, eq(tenants.id, maintenanceRequests.tenantId)).innerJoin(users, eq(users.id, tenants.userId))
         .innerJoin(units, eq(units.id, maintenanceRequests.unitId)).innerJoin(properties, eq(properties.id, units.propertyId))
-        .where(and(eq(maintenanceRequests.id, id), eq(tenants.organizationId, user.organizationId))).limit(1);
+        .where(and(eq(maintenanceRequests.id, id), eq(tenants.organizationId, user.organizationId), eq(users.organizationId, user.organizationId), eq(properties.organizationId, user.organizationId))).limit(1);
       if (!rows[0]) return res.status(404).json({ error: 'Resource not found.' });
-      return res.json({ ...rows[0], comments: await db.select({ comment: maintenanceComments, user: { id: users.id, organizationId: users.organizationId, email: users.email, firstName: users.firstName, lastName: users.lastName, role: users.role } }).from(maintenanceComments).innerJoin(users, eq(users.id, maintenanceComments.userId)).where(eq(maintenanceComments.maintenanceRequestId, id)).orderBy(asc(maintenanceComments.createdAt)) });
+      return res.json({ ...rows[0], comments: await db.select({ comment: maintenanceComments, user: { id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName, role: users.role } }).from(maintenanceComments).innerJoin(users, eq(users.id, maintenanceComments.userId)).where(and(eq(maintenanceComments.maintenanceRequestId, id), eq(users.organizationId, user.organizationId))).orderBy(asc(maintenanceComments.createdAt)) });
     } catch (error) { return next(error); }
   });
   app.patch('/admin/maintenance/:id', requireManagement, async (req, res, next) => {
     try {
       const id = idInput.parse(req.params.id); const input = maintenanceStatusInput.parse(req.body); const user = (req as AuthenticatedRequest).authUser;
-      const owned = await db.select({ request: maintenanceRequests }).from(maintenanceRequests).innerJoin(tenants, eq(tenants.id, maintenanceRequests.tenantId)).where(and(eq(maintenanceRequests.id, id), eq(tenants.organizationId, user.organizationId))).limit(1);
+      const owned = await db.select({ request: maintenanceRequests }).from(maintenanceRequests).innerJoin(tenants, eq(tenants.id, maintenanceRequests.tenantId)).innerJoin(units, eq(units.id, maintenanceRequests.unitId)).innerJoin(properties, eq(properties.id, units.propertyId)).where(and(eq(maintenanceRequests.id, id), eq(tenants.organizationId, user.organizationId), eq(properties.organizationId, user.organizationId))).limit(1);
       if (!owned[0]) return res.status(404).json({ error: 'Resource not found.' });
       const [updated] = await db.update(maintenanceRequests).set({ status: input.status, resolvedAt: input.status === 'RESOLVED' ? new Date() : null, updatedAt: new Date() }).where(eq(maintenanceRequests.id, id)).returning();
       return updated ? res.json(updated) : res.status(404).json({ error: 'Resource not found.' });
@@ -143,7 +193,7 @@ export function createApp(databaseUrl?: string) {
   app.post('/admin/maintenance/:id/comments', requireManagement, async (req, res, next) => {
     try {
       const id = idInput.parse(req.params.id); const input = maintenanceCommentInput.parse(req.body); const user = (req as AuthenticatedRequest).authUser;
-      const owned = await db.select({ id: maintenanceRequests.id }).from(maintenanceRequests).innerJoin(tenants, eq(tenants.id, maintenanceRequests.tenantId)).where(and(eq(maintenanceRequests.id, id), eq(tenants.organizationId, user.organizationId))).limit(1);
+      const owned = await db.select({ id: maintenanceRequests.id }).from(maintenanceRequests).innerJoin(tenants, eq(tenants.id, maintenanceRequests.tenantId)).innerJoin(units, eq(units.id, maintenanceRequests.unitId)).innerJoin(properties, eq(properties.id, units.propertyId)).where(and(eq(maintenanceRequests.id, id), eq(tenants.organizationId, user.organizationId), eq(properties.organizationId, user.organizationId))).limit(1);
       if (!owned[0]) return res.status(404).json({ error: 'Resource not found.' });
       const [comment] = await db.insert(maintenanceComments).values({ maintenanceRequestId: id, userId: user.id, body: input.body }).returning();
       return res.status(201).json(comment);
@@ -154,22 +204,21 @@ export function createApp(databaseUrl?: string) {
   app.get('/tenant/dashboard', requireTenant, async (req, res, next) => {
     try { const context = await getTenantContext(db, (req as AuthenticatedRequest).authUser.id); return context ? res.json(tenantDashboard(context)) : res.status(404).json({ error: 'Resource not found.' }); } catch (error) { return next(error); }
   });
-  app.get('/tenant/maintenance/new', requireTenant, (_req, res) => res.json({ route: '/tenant/maintenance/new', method: 'POST' }));
   app.post('/tenant/maintenance/new', requireTenant, async (req, res, next) => {
     try {
       const input = tenantMaintenanceInput.parse(req.body);
       const user = (req as AuthenticatedRequest).authUser;
       const tenant = await tenantForUser(db, user.id);
       if (!tenant) return res.status(404).json({ error: 'Resource not found.' });
-      const unitRows = await db.select({ unit: units }).from(units).innerJoin(leases, eq(leases.unitId, units.id)).where(and(eq(leases.tenantId, tenant.id), eq(leases.status, 'ACTIVE'))).orderBy(desc(leases.startDate)).limit(1);
+      const unitRows = await db.select({ unit: units }).from(units).innerJoin(leases, eq(leases.unitId, units.id)).innerJoin(properties, eq(properties.id, units.propertyId)).where(and(eq(leases.tenantId, tenant.id), eq(leases.status, 'ACTIVE'), eq(properties.organizationId, tenant.organizationId))).orderBy(desc(leases.startDate)).limit(1);
       if (!unitRows[0]) return res.status(404).json({ error: 'Resource not found.' });
       const [created] = await db.insert(maintenanceRequests).values({ tenantId: tenant.id, unitId: unitRows[0].unit.id, title: input.title, description: input.description, priority: input.priority }).returning();
       return res.status(201).json(created);
     } catch (error) { return next(error); }
   });
-  app.get('/tenant/maintenance', requireTenant, async (req, res, next) => { try { const user = (req as AuthenticatedRequest).authUser; const tenant = await tenantForUser(db, user.id); if (!tenant) return res.status(404).json({ error: 'Resource not found.' }); return res.json(await db.select().from(maintenanceRequests).where(eq(maintenanceRequests.tenantId, tenant.id)).orderBy(desc(maintenanceRequests.createdAt))); } catch (error) { return next(error); } });
-  app.get('/tenant/maintenance/:id', requireTenant, async (req, res, next) => { try { const id = idInput.parse(req.params.id); const user = (req as AuthenticatedRequest).authUser; const tenant = await tenantForUser(db, user.id); if (!tenant) return res.status(404).json({ error: 'Resource not found.' }); const rows = await db.select().from(maintenanceRequests).where(and(eq(maintenanceRequests.id, id), eq(maintenanceRequests.tenantId, tenant.id))).limit(1); if (!rows[0]) return res.status(404).json({ error: 'Resource not found.' }); return res.json({ request: rows[0], comments: await db.select({ comment: maintenanceComments, user: { id: users.id, organizationId: users.organizationId, email: users.email, firstName: users.firstName, lastName: users.lastName, role: users.role } }).from(maintenanceComments).innerJoin(users, eq(users.id, maintenanceComments.userId)).where(eq(maintenanceComments.maintenanceRequestId, id)).orderBy(asc(maintenanceComments.createdAt)) }); } catch (error) { return next(error); } });
-  app.post('/tenant/maintenance/:id/comments', requireTenant, async (req, res, next) => { try { const id = idInput.parse(req.params.id); const input = maintenanceCommentInput.parse(req.body); const user = (req as AuthenticatedRequest).authUser; const tenant = await tenantForUser(db, user.id); if (!tenant) return res.status(404).json({ error: 'Resource not found.' }); const owned = await db.select({ id: maintenanceRequests.id }).from(maintenanceRequests).where(and(eq(maintenanceRequests.id, id), eq(maintenanceRequests.tenantId, tenant.id))).limit(1); if (!owned[0]) return res.status(404).json({ error: 'Resource not found.' }); const [comment] = await db.insert(maintenanceComments).values({ maintenanceRequestId: id, userId: user.id, body: input.body }).returning(); return res.status(201).json(comment); } catch (error) { return next(error); } });
+  app.get('/tenant/maintenance', requireTenant, async (req, res, next) => { try { const user = (req as AuthenticatedRequest).authUser; const tenant = await tenantForUser(db, user.id); if (!tenant) return res.status(404).json({ error: 'Resource not found.' }); return res.json(await db.select({ request: maintenanceRequests }).from(maintenanceRequests).innerJoin(units, eq(units.id, maintenanceRequests.unitId)).innerJoin(properties, eq(properties.id, units.propertyId)).where(and(eq(maintenanceRequests.tenantId, tenant.id), eq(properties.organizationId, tenant.organizationId))).orderBy(desc(maintenanceRequests.createdAt)).then(rows => rows.map(row => row.request))); } catch (error) { return next(error); } });
+  app.get('/tenant/maintenance/:id', requireTenant, async (req, res, next) => { try { const id = idInput.parse(req.params.id); const user = (req as AuthenticatedRequest).authUser; const tenant = await tenantForUser(db, user.id); if (!tenant) return res.status(404).json({ error: 'Resource not found.' }); const rows = await db.select({ request: maintenanceRequests }).from(maintenanceRequests).innerJoin(units, eq(units.id, maintenanceRequests.unitId)).innerJoin(properties, eq(properties.id, units.propertyId)).where(and(eq(maintenanceRequests.id, id), eq(maintenanceRequests.tenantId, tenant.id), eq(properties.organizationId, tenant.organizationId))).limit(1); if (!rows[0]) return res.status(404).json({ error: 'Resource not found.' }); return res.json({ request: rows[0].request, comments: await db.select({ comment: maintenanceComments, user: { id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName, role: users.role } }).from(maintenanceComments).innerJoin(users, eq(users.id, maintenanceComments.userId)).where(and(eq(maintenanceComments.maintenanceRequestId, id), eq(users.organizationId, tenant.organizationId))).orderBy(asc(maintenanceComments.createdAt)) }); } catch (error) { return next(error); } });
+  app.post('/tenant/maintenance/:id/comments', requireTenant, async (req, res, next) => { try { const id = idInput.parse(req.params.id); const input = maintenanceCommentInput.parse(req.body); const user = (req as AuthenticatedRequest).authUser; const tenant = await tenantForUser(db, user.id); if (!tenant) return res.status(404).json({ error: 'Resource not found.' }); const owned = await db.select({ id: maintenanceRequests.id }).from(maintenanceRequests).innerJoin(units, eq(units.id, maintenanceRequests.unitId)).innerJoin(properties, eq(properties.id, units.propertyId)).where(and(eq(maintenanceRequests.id, id), eq(maintenanceRequests.tenantId, tenant.id), eq(properties.organizationId, tenant.organizationId))).limit(1); if (!owned[0]) return res.status(404).json({ error: 'Resource not found.' }); const [comment] = await db.insert(maintenanceComments).values({ maintenanceRequestId: id, userId: user.id, body: input.body }).returning(); return res.status(201).json(comment); } catch (error) { return next(error); } });
   app.get('/tenant/lease', requireTenant, async (req, res, next) => { try { const context = await getTenantContext(db, (req as AuthenticatedRequest).authUser.id); return context ? res.json(context.leases) : res.status(404).json({ error: 'Resource not found.' }); } catch (error) { return next(error); } });
   app.get('/tenant/documents', requireTenant, async (req, res, next) => { try { const result = await getTenantDocuments(db, (req as AuthenticatedRequest).authUser.id); return result ? res.json(result.documents) : res.status(404).json({ error: 'Resource not found.' }); } catch (error) { return next(error); } });
   app.get('/tenant/profile', requireTenant, async (req, res, next) => { try { const context = await getTenantContext(db, (req as AuthenticatedRequest).authUser.id); return context ? res.json({ tenant: context.tenant, user: publicUser(context.user) }) : res.status(404).json({ error: 'Resource not found.' }); } catch (error) { return next(error); } });
@@ -183,5 +232,5 @@ export function createApp(databaseUrl?: string) {
   });
   return { app, pool };
 }
-async function tenantForUser(db: ReturnType<typeof createDb>['db'], userId: string) { const rows = await db.select().from(tenants).where(eq(tenants.userId, userId)).limit(1); return rows[0]; }
-function publicUser(user: { id: string; organizationId: string; email: string; firstName: string; lastName: string; role: string }) { return { id: user.id, organizationId: user.organizationId, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role }; }
+async function tenantForUser(db: ReturnType<typeof createDb>['db'], userId: string) { const rows = await db.select({ tenant: tenants }).from(tenants).innerJoin(users, eq(users.id, tenants.userId)).where(and(eq(tenants.userId, userId), eq(tenants.organizationId, users.organizationId))).limit(1); return rows[0]?.tenant; }
+function publicUser(user: { id: string; email: string; firstName: string; lastName: string; role: string }) { return { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role }; }

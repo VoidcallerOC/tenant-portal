@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { requireRole, requireSameTenantUser } from '../src/auth/authorization.js';
-import { tenantDashboard } from '../src/tenant/queries.js';
+import { publicUser, tenantDashboard } from '../src/tenant/queries.js';
 import { tenantProfileUpdateInput } from '../src/tenant/validation.js';
 
 describe('tenant portal ownership policy', () => {
@@ -30,5 +30,12 @@ describe('tenant portal ownership policy', () => {
   it('validates only editable tenant contact fields', () => {
     expect(tenantProfileUpdateInput.parse({ phone: '555-0199', emergencyName: null, emergencyPhone: null })).toEqual({ phone: '555-0199', emergencyName: null, emergencyPhone: null });
     expect(() => tenantProfileUpdateInput.parse({ organizationId: 'other-org', phone: null, emergencyName: null, emergencyPhone: null })).toThrow();
+  });
+
+  it('does not expose organization or password fields in public user responses', () => {
+    const result = publicUser({ id: 'user-a', organizationId: 'org-a', email: 'tenant@example.test', firstName: 'Jamie', lastName: 'Rivera', role: 'TENANT', passwordHash: 'secret' } as never);
+    expect(result).toEqual({ id: 'user-a', email: 'tenant@example.test', firstName: 'Jamie', lastName: 'Rivera', role: 'TENANT' });
+    expect(result).not.toHaveProperty('passwordHash');
+    expect(result).not.toHaveProperty('organizationId');
   });
 });

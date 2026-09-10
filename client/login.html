@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign in · Harborview</title><link rel="stylesheet" href="/login.css"></head>
+<body>
+  <main class="login-shell">
+    <section class="login-card" aria-labelledby="login-title">
+      <p class="eyebrow">Harborview</p>
+      <h1 id="login-title">Sign in to your portal</h1>
+      <p class="muted">Use the credentials provided by your property team.</p>
+      <div id="error" class="alert" role="alert" aria-live="polite" hidden></div>
+      <form id="login-form">
+        <label>Email<input name="email" type="email" autocomplete="username" required></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+        <button class="primary" type="submit">Sign in</button>
+      </form>
+    </section>
+  </main>
+  <script src="/login.js"></script>
+</body>
+</html>

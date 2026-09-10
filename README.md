@@ -1,6 +1,6 @@
 # Tenant Portal Foundation
 
-Phase 1 establishes the production-oriented data foundation for a multi-tenant property-management platform. The repository was empty at the start of implementation, so this phase uses a deliberately small **TypeScript + Drizzle ORM + PostgreSQL** foundation. No UI or authentication provider is introduced yet; those decisions belong to the next phase because there was no existing infrastructure to preserve.
+This repository contains a small production-oriented **TypeScript + Express 5 + Drizzle ORM + PostgreSQL** MVP for a multi-tenant property-management platform. The management console and tenant portal are static HTML/CSS/JavaScript frontends served by Express; authentication uses database-backed opaque sessions.
 
 ## Setup
 
@@ -28,7 +28,7 @@ The schema is in `src/db/schema.ts`. It defines organizations, users, properties
 
 ## Assumptions and deferred decisions
 
-The requested model says `users.email` is unique globally, so the schema implements a global unique index rather than an organization-scoped email index. Authentication is not implemented because the repository had no auth system; Phase 2 should select the identity provider and map its subject to `users.id`. Row-level security is not enabled in this initial migration because the application connection strategy and authenticated database role are not yet defined; the organization-aware access layer is the enforceable boundary for this phase, and database RLS should be added once that deployment model is chosen.
+The requested model says `users.email` is unique globally, so the schema implements a global unique index rather than an organization-scoped email index. Row-level security is not enabled because the application connection strategy and authenticated database role are not yet defined; the organization-aware access layer is the enforceable boundary for this MVP, and database RLS should be added once that deployment model is chosen.
 
 Documents store a file URL and metadata only. Actual object storage, authorization checks for downloads, and document-type taxonomy are deferred. The seed includes two properties, three units, two tenants, two active leases, and two maintenance requests.
 
@@ -38,7 +38,7 @@ Phase 2 adds a small Express server in `src/server.ts`. Authentication uses data
 
 The server has explicit middleware for authenticated users, management roles (`ADMIN` and `MANAGER`), and tenants. Authorization is enforced on the server for every protected route. Management queries are scoped to `req.authUser.organizationId`. Tenant queries first resolve the tenant record from `req.authUser.id`, then constrain maintenance, lease, document, and unit operations to that tenant. Cross-tenant resource misses return the same generic 404 response as any other missing resource.
 
-The route layer covers `/login`, `/logout`, all requested `/admin/*` paths, and all requested `/tenant/*` paths. The current response bodies are intentionally minimal JSON placeholders; sophisticated UI is deferred.
+The route layer covers the static `/login` page and login API, `/logout`, all requested `/admin/*` paths, and all requested `/tenant/*` paths. The management and resident consoles are intentionally small static HTML/CSS/JavaScript interfaces.
 
 Running `pnpm db:seed` creates or updates these development accounts:
 
@@ -55,7 +55,7 @@ These credentials are for local development only and must not be used in product
 
 Phase 3 adds the authenticated `/admin` management console. Because the repository did not contain a React or component layer, the UI is a small responsive server-served HTML/CSS/JavaScript shell under `client/`, while all data operations remain database-backed Express endpoints. The dashboard includes portfolio metrics, recent maintenance, recent tenants, and property overview cards. Property management includes validated property creation, property detail, unit creation, unit editing, and unit status changes. Tenant management includes an organization-scoped directory and tenant detail payloads with leases and maintenance requests.
 
-The dashboard API endpoints are `/admin/dashboard`, `/admin/properties`, `/admin/properties/:id`, `/admin/properties/:id/units`, `/admin/properties/:propertyId/units/:id`, `/admin/tenants`, and `/admin/tenants/:id`. Each endpoint uses the Phase 2 management-role middleware and organization predicates. Empty, loading, validation, and error states are represented in the dashboard UI. Payments are not included.
+The dashboard API endpoints are `/admin/dashboard`, `/admin/properties`, `/admin/properties/:id`, `/admin/properties/:id/units`, `/admin/properties/:propertyId/units/:id`, `/admin/tenants`, and `/admin/tenants/:id`. Management can also create a tenant account through `POST /admin/tenants`; the server assigns the authenticated manager's organization and creates the user and tenant records in one transaction. Each endpoint uses management-role middleware and organization predicates. Empty, loading, validation, and error states are represented in the dashboard UI. Payments are not included.
 
 ## Phase 4 tenant portal
 
@@ -63,6 +63,10 @@ Phase 4 adds the resident-facing `/tenant` portal with a separate visual languag
 
 Tenant APIs never accept a tenant ID from the client. They derive the tenant record from the authenticated session user ID, then constrain lease, unit, property, maintenance, document, and profile queries to that tenant. Documents must match both the tenant and one of that tenant's leases. Profile updates only accept phone and emergency-contact fields. If no documents are associated with the tenant's leases, the portal displays a safe empty state; file upload and object-storage infrastructure have not been invented.
 
+Management can assign a tenant to an organization-owned unit and create an active or pending lease from the tenant directory. The server verifies both tenant and unit ownership, rejects conflicting active leases, and marks an actively leased unit occupied.
+
+Payments are intentionally outside this MVP scope and will be implemented as a separate future phase.
+
 ## Phase 1 status
 
-**Complete:** schema, migration, seed system, basic configuration, role model, validation, organization-aware read access layer, and verification tests. UI and authentication are intentionally not part of this foundation phase.
+**Complete:** schema, migration, seed system, authenticated management and tenant portals, role model, tenant account creation, organization-aware access controls, validation, and verification tests.
