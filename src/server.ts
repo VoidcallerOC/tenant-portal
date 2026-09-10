@@ -50,6 +50,7 @@ export function createApp(databaseUrl?: string) {
 
   app.use(express.json({ limit: '100kb' }));
 
+  app.get('/', (_req, res) => res.redirect('/login'));
   app.get('/login', (_req, res) => res.sendFile(`${clientRoot}/login.html`));
   app.post('/login', async (req, res, next) => {
     try {
