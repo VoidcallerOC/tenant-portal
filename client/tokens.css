@@ -21,26 +21,34 @@
   --welcome: #f4eee0;
   --welcome-line: #eee2c8;
   --hairline: #edf2ee;
+  --nav-bg: #205b4e;
+  --nav-text: #f3faf7;
+  --nav-muted: #c5ddd4;
+  --nav-active: #163f36;
 }
 html[data-theme="dark"] {
   color-scheme: dark;
-  --ink: #e7f1ec;
-  --muted: #9eb0a8;
-  --line: #2c3d36;
-  --card: #16211d;
-  --field: #101a17;
-  --teal: #6fc4b0;
-  --teal-dark: #8fd4c3;
+  --ink: #f2f7f4;
+  --muted: #c2d0cb;
+  --line: #3a4d46;
+  --card: #1a2622;
+  --field: #121c19;
+  --teal: #8fd4c3;
+  --teal-dark: #1b3a32;
   --mint: #1d3a32;
   --gold: #e0b15a;
-  --coral: #e08b82;
+  --coral: #f0a8a1;
   --page: #0d1412;
   --page-2: #111a17;
   --shadow: 0 12px 32px rgb(0 0 0 / 38%);
-  --focus: rgb(111 196 176 / 35%);
+  --focus: rgb(143 212 195 / 40%);
   --welcome: #2a2416;
   --welcome-line: #3d3420;
-  --hairline: #24332d;
+  --hairline: #2c3d36;
+  --nav-bg: #10211c;
+  --nav-text: #f3faf7;
+  --nav-muted: #d5e8e1;
+  --nav-active: #1e3f36;
 }
 * { box-sizing: border-box; }
 button, input, select, textarea { font: inherit; }
@@ -59,7 +67,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .muted { color: var(--muted); font-size: 14px; margin: 0; line-height: 1.55; }
 .primary {
   border: 0;
-  background: var(--teal);
+  background: #2d7967;
   color: #fff;
   border-radius: var(--radius-sm);
   padding: 11px 16px;
@@ -67,23 +75,22 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   cursor: pointer;
   transition: background .18s ease, transform .18s ease;
 }
-.primary:hover { background: var(--teal-dark); transform: translateY(-1px); }
+.primary:hover { background: #246857; transform: translateY(-1px); }
 .primary:disabled { cursor: wait; opacity: .65; transform: none; }
 .button {
   display: inline-block;
-  background: var(--teal-dark);
-  color: #0d1412;
+  background: #2d7967;
+  color: #fff;
   padding: 11px 15px;
   border-radius: 7px;
   text-decoration: none;
   font-size: 13px;
   font-weight: 750;
 }
-html:not([data-theme="dark"]) .button { color: #fff; background: #205b4e; }
 .button:hover { filter: brightness(1.08); }
 .alert { padding: 13px; border-radius: var(--radius-sm); margin-bottom: 18px; }
-.error { background: #ffe8e5; color: var(--coral); }
-html[data-theme="dark"] .error { background: #3a1f1c; }
+.error { background: #ffe8e5; color: #8f3b34; }
+html[data-theme="dark"] .error { background: #4a2420; color: #ffc7c1; }
 .badge {
   display: inline-flex;
   align-items: center;
@@ -98,15 +105,18 @@ html[data-theme="dark"] .error { background: #3a1f1c; }
 .badge.closed, .badge.vacant, .badge.expired, .badge.terminated { background: #eef1ef; color: var(--muted); }
 .badge.high, .badge.emergency { background: #ffe5e1; color: var(--coral); }
 .badge.pending { background: #fff1d5; color: var(--gold); }
+html[data-theme="dark"] .badge.active,
+html[data-theme="dark"] .badge.resolved,
+html[data-theme="dark"] .badge.occupied { background: #21463c; color: #b6eadc; }
 html[data-theme="dark"] .badge.open,
 html[data-theme="dark"] .badge.in_progress,
-html[data-theme="dark"] .badge.pending { background: #3a2e16; }
+html[data-theme="dark"] .badge.pending { background: #3a2e16; color: #f0c56a; }
 html[data-theme="dark"] .badge.closed,
 html[data-theme="dark"] .badge.vacant,
 html[data-theme="dark"] .badge.expired,
-html[data-theme="dark"] .badge.terminated { background: #24332d; }
+html[data-theme="dark"] .badge.terminated { background: #24332d; color: #c2d0cb; }
 html[data-theme="dark"] .badge.high,
-html[data-theme="dark"] .badge.emergency { background: #3a1f1c; }
+html[data-theme="dark"] .badge.emergency { background: #3a1f1c; color: #ffc7c1; }
 .welcome-card { background: var(--welcome); border-color: var(--welcome-line); }
 input, select, textarea {
   background: var(--field);
@@ -122,5 +132,10 @@ input, select, textarea {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+}
+html[data-theme="dark"] .theme-toggle {
+  background: #1a2a25;
+  color: #f3faf7;
+  border-color: #4a635a;
 }
 .theme-toggle:hover { border-color: var(--teal); }
