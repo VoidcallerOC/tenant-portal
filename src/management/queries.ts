@@ -3,7 +3,7 @@ import type { Db } from '../db/client.js';
 import { leases, maintenanceRequests, properties, tenants, units, users } from '../db/schema.js';
 
 export async function getDashboard(db: Db, organizationId: string) {
-  const [propertyRows, unitRows, tenantRows, openRequestRows, recentRequests, recentTenants] = await Promise.all([
+  const results = await Promise.allSettled([
     db.select().from(properties).where(eq(properties.organizationId, organizationId)),
     db.select({ unit: units }).from(units).innerJoin(properties, eq(properties.id, units.propertyId)).where(eq(properties.organizationId, organizationId)),
     db.select({ tenant: tenants, user: { id: users.id, organizationId: users.organizationId, email: users.email, firstName: users.firstName, lastName: users.lastName, role: users.role } }).from(tenants).innerJoin(users, eq(users.id, tenants.userId)).where(eq(tenants.organizationId, organizationId)),
@@ -14,10 +14,17 @@ export async function getDashboard(db: Db, organizationId: string) {
       .where(and(eq(tenants.organizationId, organizationId), eq(properties.organizationId, organizationId))).orderBy(desc(maintenanceRequests.createdAt)).limit(5),
     db.select({ tenant: tenants, user: { id: users.id, organizationId: users.organizationId, email: users.email, firstName: users.firstName, lastName: users.lastName, role: users.role } }).from(tenants).innerJoin(users, eq(users.id, tenants.userId)).where(eq(tenants.organizationId, organizationId)).orderBy(desc(tenants.createdAt)).limit(5),
   ]);
+  const value = <T,>(index: number, fallback: T) => { const result = results[index]!; return result.status === 'fulfilled' ? (result as PromiseFulfilledResult<T>).value : fallback; };
+  const propertyRows = value(0, [] as Array<typeof properties.$inferSelect>);
+  const unitRows = value(1, [] as Array<{ unit: typeof units.$inferSelect }>);
+  const tenantRows = value(2, [] as Array<{ tenant: typeof tenants.$inferSelect; user: { id: string; organizationId: string; email: string; firstName: string; lastName: string; role: string } }>);
+  const openRequestRows = value(3, [] as Array<{ request: typeof maintenanceRequests.$inferSelect }>);
+  const recentRequests = value(4, [] as Array<{ request: typeof maintenanceRequests.$inferSelect; tenant: typeof tenants.$inferSelect; user: { id: string; organizationId: string; email: string; firstName: string; lastName: string; role: string }; unit: typeof units.$inferSelect; property: typeof properties.$inferSelect }>);
+  const recentTenants = value(5, [] as Array<{ tenant: typeof tenants.$inferSelect; user: { id: string; organizationId: string; email: string; firstName: string; lastName: string; role: string }}>);
 
   const occupied = unitRows.filter(({ unit }) => unit.status === 'OCCUPIED').length;
   const vacant = unitRows.filter(({ unit }) => unit.status === 'VACANT').length;
-  const activeTenantRows = await db.select({ tenantId: leases.tenantId }).from(leases).innerJoin(tenants, eq(tenants.id, leases.tenantId)).where(and(eq(tenants.organizationId, organizationId), eq(leases.status, 'ACTIVE')));
+  const activeTenantRows = await db.select({ tenantId: leases.tenantId }).from(leases).innerJoin(tenants, eq(tenants.id, leases.tenantId)).where(and(eq(tenants.organizationId, organizationId), eq(leases.status, 'ACTIVE'))).catch(() => []);
   const activeTenantIds = new Set(activeTenantRows.map((row) => row.tenantId));
 
   return {
