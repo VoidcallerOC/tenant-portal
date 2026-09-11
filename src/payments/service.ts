@@ -43,8 +43,8 @@ function billingUrls() {
   const base = process.env.PUBLIC_APP_URL;
   if (!base) throw new Error('PUBLIC_APP_URL is required for Stripe Checkout.');
   return {
-    success_url: process.env.STRIPE_SUCCESS_URL ?? `${base}/tenant#payments`,
-    cancel_url: process.env.STRIPE_CANCEL_URL ?? `${base}/tenant#payments`,
+    success_url: process.env.STRIPE_SUCCESS_URL ?? `${base}/tenant#pay`,
+    cancel_url: process.env.STRIPE_CANCEL_URL ?? `${base}/tenant#pay`,
   };
 }
 
@@ -61,18 +61,36 @@ async function currentTenantLease(db: Db, userId: string) {
   return rows[0] ?? null;
 }
 
-export async function createTenantCheckoutSession(db: Db, userId: string) {
-  const context = await currentTenantLease(db, userId);
+export async function createTenantCheckoutSession(db: Db, userId: string, chargeId?: string) {
+  let context = await currentTenantLease(db, userId);
   if (!context) return { kind: 'not_found' as const };
-  const periodStart = currentPeriodStart();
-  const existingRows = await db.select().from(charges).where(and(eq(charges.organizationId, context.tenant.organizationId), eq(charges.tenantId, context.tenant.id), eq(charges.leaseId, context.lease.id), eq(charges.periodStart, periodStart))).limit(1);
-  let charge = existingRows[0];
-  if (!charge) {
-    const inserted = await db.insert(charges).values({ organizationId: context.tenant.organizationId, tenantId: context.tenant.id, leaseId: context.lease.id, periodStart, amount: context.lease.monthlyRent, status: 'DUE' }).onConflictDoNothing({ target: [charges.leaseId, charges.periodStart] }).returning();
-    charge = inserted[0] ?? (await db.select().from(charges).where(and(eq(charges.organizationId, context.tenant.organizationId), eq(charges.tenantId, context.tenant.id), eq(charges.leaseId, context.lease.id), eq(charges.periodStart, periodStart))).limit(1))[0];
+  let periodStart = currentPeriodStart();
+  let charge;
+  if (chargeId) {
+    const selected = await db.select({ charge: charges, tenant: tenants, user: users, lease: leases, unit: units, property: properties })
+      .from(charges)
+      .innerJoin(tenants, eq(tenants.id, charges.tenantId))
+      .innerJoin(users, eq(users.id, tenants.userId))
+      .innerJoin(leases, eq(leases.id, charges.leaseId))
+      .innerJoin(units, eq(units.id, leases.unitId))
+      .innerJoin(properties, eq(properties.id, units.propertyId))
+      .where(and(eq(charges.id, chargeId), eq(tenants.userId, userId), eq(charges.organizationId, tenants.organizationId), eq(leases.status, 'ACTIVE'), eq(properties.organizationId, tenants.organizationId)))
+      .limit(1);
+    if (!selected[0]) return { kind: 'not_found' as const };
+    context = selected[0];
+    charge = selected[0].charge;
+    periodStart = charge.periodStart;
+  } else {
+    const existingRows = await db.select().from(charges).where(and(eq(charges.organizationId, context.tenant.organizationId), eq(charges.tenantId, context.tenant.id), eq(charges.leaseId, context.lease.id), eq(charges.periodStart, periodStart))).limit(1);
+    charge = existingRows[0];
+    if (!charge) {
+      const inserted = await db.insert(charges).values({ organizationId: context.tenant.organizationId, tenantId: context.tenant.id, leaseId: context.lease.id, periodStart, amount: context.lease.monthlyRent, status: 'DUE' }).onConflictDoNothing({ target: [charges.leaseId, charges.periodStart] }).returning();
+      charge = inserted[0] ?? (await db.select().from(charges).where(and(eq(charges.organizationId, context.tenant.organizationId), eq(charges.tenantId, context.tenant.id), eq(charges.leaseId, context.lease.id), eq(charges.periodStart, periodStart))).limit(1))[0];
+    }
   }
   if (!charge) throw new Error('Unable to create rent charge.');
   if (charge.status === 'PAID') return { kind: 'paid' as const, charge };
+  if (charge.status !== 'DUE' && charge.status !== 'OPEN') return { kind: 'not_payable' as const, charge };
   const client = stripe();
   if (charge.status === 'OPEN' && charge.stripeCheckoutSessionId) {
     const existing = await client.checkout.sessions.retrieve(charge.stripeCheckoutSessionId);
@@ -103,7 +121,8 @@ export async function listTenantCharges(db: Db, userId: string) {
     .innerJoin(units, eq(units.id, leases.unitId))
     .innerJoin(properties, eq(properties.id, units.propertyId))
     .where(and(eq(charges.tenantId, tenants.id), eq(tenants.userId, userId), eq(charges.organizationId, tenants.organizationId), eq(properties.organizationId, tenants.organizationId)))
-    .orderBy(desc(charges.periodStart), desc(charges.createdAt));
+    .orderBy(desc(charges.periodStart), desc(charges.createdAt))
+    .limit(12);
   return rows.map((row) => ({ ...row, dueDate: dueDateForPeriod(row.lease.startDate, row.charge.periodStart) }));
 }
 

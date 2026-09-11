@@ -20,6 +20,7 @@ const idInput = z.string().uuid();
 const maintenanceCommentInput = z.object({ body: z.string().trim().min(1).max(5_000) }).strict();
 const maintenanceStatusInput = z.object({ status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']) }).strict();
 const maintenanceFilterInput = z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']);
+const tenantChargeCheckoutInput = z.object({ chargeId: z.string().uuid().optional() }).strict();
 type AuthenticatedRequest = Request & { authUser: NonNullable<Awaited<ReturnType<typeof getUserForSession>>> };
 
 function readCookie(req: Request, name: string) {
@@ -233,14 +234,15 @@ export function createApp(databaseUrl?: string) {
   });
 
   app.get('/tenant', requireTenant, (_req, res) => res.sendFile(`${clientRoot}/tenant.html`));
-  app.get('/tenant/payments', requireTenant, async (req, res, next) => {
+  app.get('/tenant/charges', requireTenant, async (req, res, next) => {
     try { return res.json(await listTenantCharges(db, (req as AuthenticatedRequest).authUser.id)); } catch (error) { return next(error); }
   });
-  app.post('/tenant/payments/checkout', requireTenant, async (req, res, next) => {
+  app.post('/tenant/charges/checkout', requireTenant, async (req, res, next) => {
     try {
-      const result = await createTenantCheckoutSession(db, (req as AuthenticatedRequest).authUser.id);
+      const input = tenantChargeCheckoutInput.parse(req.body ?? {});
+      const result = await createTenantCheckoutSession(db, (req as AuthenticatedRequest).authUser.id, input.chargeId);
       if (result.kind === 'not_found') return res.status(404).json({ error: 'Resource not found.' });
-      if (result.kind === 'paid') return res.status(409).json({ error: 'This month\'s rent is already paid.' });
+      if (result.kind === 'paid' || result.kind === 'not_payable') return res.status(409).json({ error: 'This charge is not payable.' });
       if (!result.url) return res.status(503).json({ error: 'Stripe Checkout is unavailable.' });
       return res.json({ url: result.url });
     } catch (error) { return next(error); }
