@@ -56,6 +56,7 @@ export const properties = pgTable('properties', {
   id: uuid('id').defaultRandom().primaryKey(),
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
+  monthlyRent: numeric('monthly_rent', { precision: 12, scale: 2 }),
   addressLine1: text('address_line1').notNull(),
   addressLine2: text('address_line2'),
   city: text('city').notNull(),

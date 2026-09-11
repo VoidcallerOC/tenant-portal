@@ -10,7 +10,7 @@ import { AuthError, requireAuthenticated, requireRole } from './auth/authorizati
 import { hashPassword } from './auth/password.js';
 import { authenticate, createSession, getUserForSession, revokeSession, SESSION_COOKIE } from './auth/service.js';
 import { getDashboard, getPropertyDetail, listProperties } from './management/queries.js';
-import { leaseCreateInput, propertyCreateInput, tenantCreateInput, unitCreateInput, unitUpdateInput, uuidParam } from './management/validation.js';
+import { leaseCreateInput, propertyCreateInput, propertyUpdateInput, tenantCreateInput, unitCreateInput, unitUpdateInput, uuidParam } from './management/validation.js';
 import { getTenantContext, getTenantDocuments, tenantDashboard } from './tenant/queries.js';
 import { tenantMaintenanceInput, tenantProfileUpdateInput } from './tenant/validation.js';
 import { applyStripeChargeEvent, createTenantCheckoutSession, listOrganizationCharges, listTenantCharges, stripe } from './payments/service.js';
@@ -131,13 +131,22 @@ export function createApp(databaseUrl?: string) {
   app.get('/admin', requireManagement, (_req, res) => res.sendFile(`${clientRoot}/admin.html`));
   app.get('/admin/properties/new', requireManagement, (_req, res) => res.sendFile(`${clientRoot}/admin.html`));
   app.post('/admin/properties', requireManagement, async (req, res, next) => {
-    try { const input = propertyCreateInput.parse(req.body); const [property] = await db.insert(properties).values({ ...input, organizationId: (req as AuthenticatedRequest).authUser.organizationId }).returning(); return res.status(201).json(property); } catch (error) { return next(error); }
+    try { const input = propertyCreateInput.parse(req.body); const [property] = await db.insert(properties).values({ ...input, monthlyRent: input.monthlyRent == null ? null : input.monthlyRent.toFixed(2), organizationId: (req as AuthenticatedRequest).authUser.organizationId }).returning(); return res.status(201).json(property); } catch (error) { return next(error); }
   });
   app.get('/admin/properties', requireManagement, async (req, res, next) => {
     try { return res.json(await listProperties(db, (req as AuthenticatedRequest).authUser.organizationId)); } catch (error) { return next(error); }
   });
   app.get('/admin/properties/:id', requireManagement, async (req, res, next) => {
     try { const { id } = uuidParam.parse(req.params); const detail = await getPropertyDetail(db, (req as AuthenticatedRequest).authUser.organizationId, id); return detail ? res.json(detail) : res.status(404).json({ error: 'Resource not found.' }); } catch (error) { return next(error); }
+  });
+  app.patch('/admin/properties/:id', requireManagement, async (req, res, next) => {
+    try {
+      const { id } = uuidParam.parse(req.params);
+      const input = propertyUpdateInput.parse(req.body);
+      const organizationId = (req as AuthenticatedRequest).authUser.organizationId;
+      const [updated] = await db.update(properties).set({ ...input, monthlyRent: input.monthlyRent === undefined ? undefined : input.monthlyRent == null ? null : input.monthlyRent.toFixed(2), updatedAt: new Date() }).where(and(eq(properties.id, id), eq(properties.organizationId, organizationId))).returning();
+      return updated ? res.json(updated) : res.status(404).json({ error: 'Resource not found.' });
+    } catch (error) { return next(error); }
   });
   app.post('/admin/properties/:id/units', requireManagement, async (req, res, next) => {
     try { const { id: propertyId } = uuidParam.parse(req.params); const input = unitCreateInput.parse(req.body); const property = await db.select({ id: properties.id }).from(properties).where(and(eq(properties.id, propertyId), eq(properties.organizationId, (req as AuthenticatedRequest).authUser.organizationId))).limit(1); if (!property[0]) return res.status(404).json({ error: 'Resource not found.' }); const [unit] = await db.insert(units).values({ ...input, propertyId, bathrooms: input.bathrooms?.toFixed(2) }).returning(); return res.status(201).json(unit); } catch (error) { return next(error); }

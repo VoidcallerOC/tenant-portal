@@ -1,0 +1,1 @@
+ALTER TABLE "properties" ADD COLUMN "monthly_rent" numeric(12, 2);

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const propertyCreateInput = z.object({
   name: z.string().trim().min(1).max(160),
+  monthlyRent: z.preprocess((value) => value === '' || value === undefined ? null : value, z.coerce.number().nonnegative().finite().nullable().optional()),
   addressLine1: z.string().trim().min(1).max(200),
   addressLine2: z.string().trim().max(200).nullable().optional(),
   city: z.string().trim().min(1).max(100),
@@ -38,6 +39,7 @@ export const unitCreateInput = z.object({
   status: z.enum(['VACANT', 'OCCUPIED', 'MAINTENANCE']).default('VACANT'),
 }).strict();
 
+export const propertyUpdateInput = propertyCreateInput.partial();
 export const unitUpdateInput = unitCreateInput.partial();
 export const uuidParam = z.object({ id: z.string().uuid() });
 
