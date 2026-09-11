@@ -15,8 +15,8 @@ body {
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .sidebar {
   width: 248px;
-  background: var(--teal-dark);
-  color: #dcebe3;
+  background: var(--nav-bg);
+  color: var(--nav-text);
   padding: 28px 18px;
   display: flex;
   flex-direction: column;
@@ -24,39 +24,41 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   position: fixed;
   inset: 0 auto 0 0;
 }
-.brand { display: flex; align-items: center; gap: 11px; color: #fff; }
-.brand small { display: block; font-size: 11px; color: #a7c4b6; margin-top: 3px; }
+.brand { display: flex; align-items: center; gap: 11px; color: var(--nav-text); }
+.brand small { display: block; font-size: 11px; color: var(--nav-muted); margin-top: 3px; }
 .brand-mark {
   width: 36px;
   height: 36px;
   border-radius: 11px;
   background: var(--mint);
-  color: var(--teal-dark);
+  color: var(--ink);
   display: grid;
   place-items: center;
   font-weight: 800;
 }
+html[data-theme="dark"] .brand-mark { background: #8fd4c3; color: #10211c; }
 .sidebar nav { display: grid; gap: 8px; }
 .sidebar nav a {
-  color: #b9d2c6;
+  color: var(--nav-muted);
   text-decoration: none;
   padding: 12px 14px;
   border-radius: 9px;
   font-size: 14px;
+  font-weight: 650;
   transition: background .18s ease, color .18s ease, transform .18s ease;
 }
-.sidebar nav a:hover, .sidebar nav a.active { background: #245746; color: #fff; }
+.sidebar nav a:hover, .sidebar nav a.active { background: var(--nav-active); color: #fff; }
 .sidebar nav a:hover { transform: translateX(2px); }
 .logout {
   margin-top: auto;
-  color: #b9d2c6;
+  color: var(--nav-text);
   background: transparent;
-  border: 1px solid #376a57;
+  border: 1px solid #4a6b60;
   padding: 11px;
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
-.logout:hover { background: #245746; color: #fff; }
+.logout:hover { background: var(--nav-active); color: #fff; }
 .main {
   margin-left: 248px;
   width: calc(100% - 248px);
@@ -74,17 +76,19 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   line-height: 1.1;
   margin: 0 0 8px;
   letter-spacing: -.04em;
+  color: var(--ink);
 }
 .avatar {
   width: 44px;
   height: 44px;
   border-radius: 50%;
   background: var(--mint);
-  color: var(--teal-dark);
+  color: var(--ink);
   display: grid;
   place-items: center;
   font-weight: 750;
 }
+html[data-theme="dark"] .avatar { background: #8fd4c3; color: #10211c; }
 .stats {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
@@ -96,10 +100,11 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+  color: var(--ink);
 }
 .stat { padding: 19px; }
 .stat-label { color: var(--muted); font-size: 12px; }
-.stat-value { display: block; font-size: 28px; font-weight: 700; margin-top: 9px; }
+.stat-value { display: block; font-size: 28px; font-weight: 700; margin-top: 9px; color: var(--ink); }
 .grid.two {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -114,7 +119,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   align-items: flex-start;
   gap: 20px;
 }
-.panel h2 { margin: 0; font-size: 18px; letter-spacing: -.02em; }
+.panel h2 { margin: 0; font-size: 18px; letter-spacing: -.02em; color: var(--ink); }
 .panel-head a {
   font-size: 13px;
   color: var(--teal);
@@ -125,13 +130,13 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .list { margin-top: 20px; display: grid; gap: 2px; }
 .list-item {
   padding: 12px 0;
-  border-bottom: 1px solid #edf1ed;
+  border-bottom: 1px solid var(--hairline);
   display: flex;
   justify-content: space-between;
   gap: 10px;
 }
 .list-item:last-child { border: 0; }
-.list-item strong { font-size: 13px; }
+.list-item strong { font-size: 13px; color: var(--ink); }
 .list-item small { display: block; color: var(--muted); margin-top: 4px; }
 .property-grid {
   display: grid;
@@ -140,11 +145,11 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   margin-top: 20px;
 }
 .property-card { padding: 18px; }
-.property-card h3 { margin: 0 0 6px; font-size: 15px; }
+.property-card h3 { margin: 0 0 6px; font-size: 15px; color: var(--ink); }
 .property-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
 .bar {
   height: 7px;
-  background: #edf2ed;
+  background: var(--hairline);
   border-radius: 99px;
   margin: 16px 0 9px;
   overflow: hidden;
@@ -163,11 +168,11 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   font-weight: 750;
   cursor: pointer;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--card);
   color: var(--ink);
   transition: background .18s ease, border-color .18s ease, transform .18s ease;
 }
-.ghost:hover { border-color: #a9c5b5; background: #f8fbf8; }
+.ghost:hover { border-color: var(--teal); background: var(--mint); }
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -184,7 +189,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   border: 1px solid var(--line);
   border-radius: 7px;
   color: var(--ink);
-  background: #fff;
+  background: var(--field);
 }
 .form-grid textarea { resize: vertical; min-height: 100px; }
 .form-actions {
@@ -206,15 +211,18 @@ th {
   padding: 0 13px 13px;
 }
 td {
-  border-top: 1px solid #edf1ed;
+  border-top: 1px solid var(--hairline);
   padding: 15px 13px;
   font-size: 13px;
   vertical-align: middle;
+  color: var(--ink);
 }
 td strong { font-size: 14px; }
 td small { color: var(--muted); line-height: 1.5; }
 .late-charge td { background: #fff8ed; }
+html[data-theme="dark"] .late-charge td { background: #2d2414; }
 .late-charge td small { color: #a45d13; font-weight: 700; }
+html[data-theme="dark"] .late-charge td small { color: #e0b15a; }
 .loading { color: var(--muted); font-size: 13px; }
 #maintenance-detail { margin-top: 20px; }
 @media (max-width: 1100px) {
