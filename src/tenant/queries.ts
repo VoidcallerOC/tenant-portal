@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { documents, leases, maintenanceRequests, properties, tenants, units, users } from '../db/schema.js';
 
@@ -14,9 +14,7 @@ export async function getTenantContext(db: Db, userId: string) {
 export async function getTenantDocuments(db: Db, userId: string) {
   const context = await getTenantContext(db, userId);
   if (!context) return null;
-  const leaseIds = context.leases.map(({ lease }) => lease.id);
-  if (!leaseIds.length) return { tenant: context.tenant, documents: [] };
-  const owned = await db.select().from(documents).where(and(eq(documents.organizationId, context.tenant.organizationId), eq(documents.tenantId, context.tenant.id), inArray(documents.leaseId, leaseIds)));
+  const owned = await db.select().from(documents).where(and(eq(documents.organizationId, context.tenant.organizationId), eq(documents.tenantId, context.tenant.id)));
   return { tenant: context.tenant, documents: owned };
 }
 
