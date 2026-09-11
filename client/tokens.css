@@ -1,0 +1,73 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--ink);
+  --ink: #27342f;
+  --muted: #728079;
+  --line: #dfe8e1;
+  --card: #fff;
+  --teal: #2d7967;
+  --teal-dark: #205b4e;
+  --mint: #e2f2ec;
+  --gold: #aa7218;
+  --coral: #ae5148;
+  --page: #f8faf8;
+  --page-2: #edf5f0;
+  --shadow: 0 10px 30px rgb(44 94 61 / 7%);
+  --radius: 13px;
+  --radius-sm: 8px;
+  --focus: rgb(45 121 103 / 30%);
+}
+* { box-sizing: border-box; }
+button, input, select, textarea { font: inherit; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.eyebrow {
+  color: var(--teal);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  margin: 0 0 8px;
+}
+.muted { color: var(--muted); font-size: 14px; margin: 0; line-height: 1.55; }
+.primary {
+  border: 0;
+  background: var(--teal);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 11px 16px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: background .18s ease, transform .18s ease;
+}
+.primary:hover { background: var(--teal-dark); transform: translateY(-1px); }
+.primary:disabled { cursor: wait; opacity: .65; transform: none; }
+.button {
+  display: inline-block;
+  background: var(--teal-dark);
+  color: #fff;
+  padding: 11px 15px;
+  border-radius: 7px;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 750;
+}
+.button:hover { background: #16493e; }
+.alert { padding: 13px; border-radius: var(--radius-sm); margin-bottom: 18px; }
+.error { background: #ffe8e5; color: var(--coral); }
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.badge.active, .badge.resolved, .badge.occupied { background: var(--mint); color: var(--teal); }
+.badge.open, .badge.in_progress { background: #fff1d5; color: var(--gold); }
+.badge.closed, .badge.vacant, .badge.expired, .badge.terminated { background: #eef1ef; color: var(--muted); }
+.badge.high, .badge.emergency { background: #ffe5e1; color: var(--coral); }
+.badge.pending { background: #fff1d5; color: var(--gold); }
