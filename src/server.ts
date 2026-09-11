@@ -5,12 +5,12 @@ import { z } from 'zod';
 import { and, asc, desc, eq, or } from 'drizzle-orm';
 import Stripe from 'stripe';
 import { createDb } from './db/client.js';
-import { charges, documents, leases, maintenanceComments, maintenanceRequests, properties, tenants, units, users } from './db/schema.js';
+import { charges, documents, leases, maintenanceComments, maintenanceRequests, properties, tenants, units, usageCharges, users } from './db/schema.js';
 import { AuthError, requireAuthenticated, requireRole } from './auth/authorization.js';
 import { hashPassword } from './auth/password.js';
 import { authenticate, createSession, getUserForSession, revokeSession, SESSION_COOKIE } from './auth/service.js';
 import { getDashboard, getPropertyDetail, listProperties } from './management/queries.js';
-import { leaseCreateInput, propertyCreateInput, propertyUpdateInput, tenantCreateInput, unitCreateInput, unitUpdateInput, uuidParam } from './management/validation.js';
+import { leaseCreateInput, propertyCreateInput, propertyUpdateInput, tenantCreateInput, unitCreateInput, unitUpdateInput, usageCreateInput, uuidParam } from './management/validation.js';
 import { getTenantContext, getTenantDocuments, tenantDashboard } from './tenant/queries.js';
 import { tenantMaintenanceInput, tenantProfileUpdateInput } from './tenant/validation.js';
 import { applyStripeChargeEvent, createTenantCheckoutSession, listOrganizationCharges, listTenantCharges, stripe } from './payments/service.js';
@@ -126,6 +126,38 @@ export function createApp(databaseUrl?: string) {
       const organizationId = (req as AuthenticatedRequest).authUser.organizationId;
       const [updated] = await db.update(charges).set({ status: 'VOID', updatedAt: new Date() }).where(and(eq(charges.id, id), eq(charges.organizationId, organizationId), or(eq(charges.status, 'DUE'), eq(charges.status, 'OPEN')))).returning();
       return updated ? res.json(updated) : res.status(404).json({ error: 'Charge not found or not voidable.' });
+    } catch (error) { return next(error); }
+  });
+  app.get('/admin/overuse', requireManagement, async (req, res, next) => {
+    try {
+      const organizationId = (req as AuthenticatedRequest).authUser.organizationId;
+      const rows = await db.select({ usage: usageCharges, user: { firstName: users.firstName, lastName: users.lastName, email: users.email }, unit: units, property: properties })
+        .from(usageCharges).innerJoin(tenants, eq(tenants.id, usageCharges.tenantId)).innerJoin(users, eq(users.id, tenants.userId)).innerJoin(units, eq(units.id, usageCharges.unitId)).innerJoin(properties, eq(properties.id, usageCharges.propertyId))
+        .where(and(eq(usageCharges.organizationId, organizationId), eq(tenants.organizationId, organizationId), eq(users.organizationId, organizationId), eq(properties.organizationId, organizationId))).orderBy(desc(usageCharges.periodStart), desc(usageCharges.createdAt));
+      return res.json(rows);
+    } catch (error) { return next(error); }
+  });
+  app.post('/admin/overuse', requireManagement, async (req, res, next) => {
+    try {
+      const input = usageCreateInput.parse(req.body);
+      const organizationId = (req as AuthenticatedRequest).authUser.organizationId;
+      const leaseRows = await db.select({ lease: leases, tenant: tenants, unit: units, property: properties }).from(leases)
+        .innerJoin(tenants, eq(tenants.id, leases.tenantId)).innerJoin(units, eq(units.id, leases.unitId)).innerJoin(properties, eq(properties.id, units.propertyId))
+        .where(and(eq(leases.tenantId, input.tenantId), eq(leases.unitId, input.unitId), eq(leases.status, 'ACTIVE'), eq(tenants.organizationId, organizationId), eq(properties.organizationId, organizationId))).limit(1);
+      const assignment = leaseRows[0];
+      if (!assignment) return res.status(404).json({ error: 'No active lease found for this resident and unit.' });
+      const overageAmount = Number(((input.actualUsage - input.allowance) * input.unitRate).toFixed(2));
+      const [usage] = await db.insert(usageCharges).values({ organizationId, tenantId: input.tenantId, leaseId: assignment.lease.id, unitId: input.unitId, propertyId: assignment.property.id, category: input.category, periodStart: input.periodStart, allowance: input.allowance.toFixed(3), actualUsage: input.actualUsage.toFixed(3), unitRate: input.unitRate.toFixed(2), overageAmount: overageAmount.toFixed(2) }).returning();
+      return res.status(201).json(usage);
+    } catch (error) { if (isUniqueViolation(error)) return res.status(409).json({ error: 'An overuse record already exists for this resident, category, and period.' }); return next(error); }
+  });
+  app.patch('/admin/overuse/:id', requireManagement, async (req, res, next) => {
+    try {
+      const { id } = uuidParam.parse(req.params);
+      const status = z.object({ status: z.enum(['PAID', 'WAIVED', 'DUE']) }).strict().parse(req.body).status;
+      const organizationId = (req as AuthenticatedRequest).authUser.organizationId;
+      const [updated] = await db.update(usageCharges).set({ status, paidAt: status === 'PAID' ? new Date() : null, updatedAt: new Date() }).where(and(eq(usageCharges.id, id), eq(usageCharges.organizationId, organizationId))).returning();
+      return updated ? res.json(updated) : res.status(404).json({ error: 'Overuse record not found.' });
     } catch (error) { return next(error); }
   });
   app.get('/admin', requireManagement, (_req, res) => res.sendFile(`${clientRoot}/admin.html`));

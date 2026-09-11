@@ -27,6 +27,7 @@ export const leaseStatus = pgEnum('lease_status', ['ACTIVE', 'EXPIRED', 'PENDING
 export const maintenancePriority = pgEnum('maintenance_priority', ['LOW', 'MEDIUM', 'HIGH', 'EMERGENCY']);
 export const maintenanceStatus = pgEnum('maintenance_status', ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']);
 export const chargeStatus = pgEnum('charge_status', ['DUE', 'OPEN', 'PAID', 'FAILED', 'VOID']);
+export const usageChargeStatus = pgEnum('usage_charge_status', ['DUE', 'PAID', 'WAIVED']);
 
 export const organizations = pgTable('organizations', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -125,6 +126,29 @@ export const charges = pgTable('charges', {
   index('charges_tenant_id_idx').on(table.tenantId),
   index('charges_lease_id_idx').on(table.leaseId),
   index('charges_status_idx').on(table.status),
+]);
+
+export const usageCharges = pgTable('usage_charges', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  leaseId: uuid('lease_id').notNull().references(() => leases.id, { onDelete: 'restrict' }),
+  unitId: uuid('unit_id').notNull().references(() => units.id, { onDelete: 'restrict' }),
+  propertyId: uuid('property_id').notNull().references(() => properties.id, { onDelete: 'restrict' }),
+  category: text('category').notNull(),
+  periodStart: date('period_start').notNull(),
+  allowance: numeric('allowance', { precision: 12, scale: 3 }).notNull(),
+  actualUsage: numeric('actual_usage', { precision: 12, scale: 3 }).notNull(),
+  unitRate: numeric('unit_rate', { precision: 12, scale: 2 }).notNull(),
+  overageAmount: numeric('overage_amount', { precision: 12, scale: 2 }).notNull(),
+  status: usageChargeStatus('status').notNull().default('DUE'),
+  paidAt: timestamp('paid_at', { withTimezone: true }),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex('usage_charges_lease_category_period_unique').on(table.leaseId, table.category, table.periodStart),
+  index('usage_charges_organization_id_idx').on(table.organizationId),
+  index('usage_charges_tenant_id_idx').on(table.tenantId),
+  index('usage_charges_status_idx').on(table.status),
 ]);
 
 export const maintenanceRequests = pgTable('maintenance_requests', {

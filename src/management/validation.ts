@@ -40,6 +40,15 @@ export const unitCreateInput = z.object({
 }).strict();
 
 export const propertyUpdateInput = propertyCreateInput.partial();
+export const usageCreateInput = z.object({
+  tenantId: z.string().uuid(),
+  unitId: z.string().uuid(),
+  category: z.string().trim().min(1).max(80),
+  periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  allowance: z.coerce.number().nonnegative().finite(),
+  actualUsage: z.coerce.number().nonnegative().finite(),
+  unitRate: z.coerce.number().positive().finite(),
+}).strict().refine((value) => value.actualUsage > value.allowance, { message: 'Actual usage must exceed the allowance.', path: ['actualUsage'] });
 export const unitUpdateInput = unitCreateInput.partial();
 export const uuidParam = z.object({ id: z.string().uuid() });
 

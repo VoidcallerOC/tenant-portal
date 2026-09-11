@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { leaseCreateInput, propertyCreateInput, tenantCreateInput, unitCreateInput, unitUpdateInput } from '../src/management/validation.js';
+import { leaseCreateInput, propertyCreateInput, tenantCreateInput, unitCreateInput, unitUpdateInput, usageCreateInput } from '../src/management/validation.js';
 import { requireRole } from '../src/auth/authorization.js';
 
 describe('management CRUD validation', () => {
@@ -30,6 +30,12 @@ describe('management CRUD validation', () => {
     expect(lease.monthlyRent).toBe(1800);
     expect(lease.endDate).toBeNull();
     expect(() => leaseCreateInput.parse({ unitId: '00000000-0000-0000-0000-000000000001', startDate: '2026-09-10', endDate: '2026-09-01', monthlyRent: 1800, organizationId: 'other-org' })).toThrow();
+  });
+
+  it('calculates only usage records above the included allowance', () => {
+    const usage = usageCreateInput.parse({ tenantId: '00000000-0000-0000-0000-000000000001', unitId: '00000000-0000-0000-0000-000000000002', category: 'Water', periodStart: '2026-09-01', allowance: '100', actualUsage: '125', unitRate: '0.08' });
+    expect(usage.actualUsage).toBe(125);
+    expect(() => usageCreateInput.parse({ ...usage, actualUsage: 100 })).toThrow();
   });
 });
 
