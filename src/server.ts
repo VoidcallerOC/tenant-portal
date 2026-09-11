@@ -2,10 +2,10 @@ import 'dotenv/config';
 import { fileURLToPath } from 'node:url';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, or } from 'drizzle-orm';
 import Stripe from 'stripe';
 import { createDb } from './db/client.js';
-import { documents, leases, maintenanceComments, maintenanceRequests, properties, tenants, units, users } from './db/schema.js';
+import { charges, documents, leases, maintenanceComments, maintenanceRequests, properties, tenants, units, users } from './db/schema.js';
 import { AuthError, requireAuthenticated, requireRole } from './auth/authorization.js';
 import { hashPassword } from './auth/password.js';
 import { authenticate, createSession, getUserForSession, revokeSession, SESSION_COOKIE } from './auth/service.js';
@@ -21,6 +21,7 @@ const maintenanceCommentInput = z.object({ body: z.string().trim().min(1).max(5_
 const maintenanceStatusInput = z.object({ status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']) }).strict();
 const maintenanceFilterInput = z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']);
 const tenantChargeCheckoutInput = z.object({ chargeId: z.string().uuid().optional() }).strict();
+const chargeStatusInput = z.enum(['DUE', 'OPEN', 'PAID', 'FAILED', 'VOID']);
 type AuthenticatedRequest = Request & { authUser: NonNullable<Awaited<ReturnType<typeof getUserForSession>>> };
 
 function readCookie(req: Request, name: string) {
@@ -54,19 +55,23 @@ export function createApp(databaseUrl?: string) {
     try {
       const object = event.data.object as Stripe.Checkout.Session | Stripe.PaymentIntent;
       const metadata = object.metadata as Record<string, string> | null | undefined;
-      if (metadata?.chargeId && metadata.organizationId && metadata.tenantId && metadata.leaseId && metadata.periodStart) {
-        const chargeMetadata = { chargeId: metadata.chargeId, organizationId: metadata.organizationId, tenantId: metadata.tenantId, leaseId: metadata.leaseId, periodStart: metadata.periodStart };
-        if (event.type === 'checkout.session.completed') {
-          const session = object as Stripe.Checkout.Session;
-          if (session.payment_status === 'paid') await applyStripeChargeEvent(db, chargeMetadata, 'PAID', typeof session.payment_intent === 'string' ? session.payment_intent : null);
-        } else if (event.type === 'checkout.session.async_payment_succeeded') {
-          const session = object as Stripe.Checkout.Session;
-          await applyStripeChargeEvent(db, chargeMetadata, 'PAID', typeof session.payment_intent === 'string' ? session.payment_intent : null);
-        } else if (event.type === 'checkout.session.async_payment_failed' || event.type === 'payment_intent.payment_failed') {
-          await applyStripeChargeEvent(db, chargeMetadata, 'FAILED', null);
-        } else if (event.type === 'checkout.session.expired') {
-          await applyStripeChargeEvent(db, chargeMetadata, 'VOID', null);
-        }
+      const chargeMetadata = metadata?.chargeId && metadata.organizationId && metadata.tenantId && metadata.leaseId && metadata.periodStart
+        ? { chargeId: metadata.chargeId, organizationId: metadata.organizationId, tenantId: metadata.tenantId, leaseId: metadata.leaseId, periodStart: metadata.periodStart }
+        : undefined;
+      if (event.type === 'checkout.session.completed') {
+        const session = object as Stripe.Checkout.Session;
+        if (session.payment_status === 'paid') await applyStripeChargeEvent(db, { metadata: chargeMetadata, sessionId: session.id }, 'PAID', typeof session.payment_intent === 'string' ? session.payment_intent : null);
+      } else if (event.type === 'payment_intent.succeeded') {
+        const paymentIntent = object as Stripe.PaymentIntent;
+        await applyStripeChargeEvent(db, { metadata: chargeMetadata, sessionId: undefined }, 'PAID', paymentIntent.id);
+      } else if (event.type === 'checkout.session.async_payment_succeeded') {
+        const session = object as Stripe.Checkout.Session;
+        await applyStripeChargeEvent(db, { metadata: chargeMetadata, sessionId: session.id }, 'PAID', typeof session.payment_intent === 'string' ? session.payment_intent : null);
+      } else if (event.type === 'checkout.session.async_payment_failed' || event.type === 'payment_intent.payment_failed') {
+        const sessionId = event.type === 'checkout.session.async_payment_failed' ? (object as Stripe.Checkout.Session).id : undefined;
+        await applyStripeChargeEvent(db, { metadata: chargeMetadata, sessionId }, 'FAILED', null);
+      } else if (event.type === 'checkout.session.expired') {
+        await applyStripeChargeEvent(db, { metadata: chargeMetadata, sessionId: (object as Stripe.Checkout.Session).id }, 'VOID', null);
       }
       return res.json({ received: true });
     } catch (error) { console.error(error); return res.status(500).json({ error: 'Webhook processing failed.' }); }
@@ -96,6 +101,7 @@ export function createApp(databaseUrl?: string) {
     } catch (error) { return next(error); }
   });
   const requireManagement = (req: Request, res: Response, next: NextFunction) => { try { requireRole((req as AuthenticatedRequest).authUser, 'ADMIN', 'MANAGER'); return next(); } catch (error) { return sendAuthError(error, res, next); } };
+  const requireManager = (req: Request, res: Response, next: NextFunction) => { try { requireRole((req as AuthenticatedRequest).authUser, 'MANAGER'); return next(); } catch (error) { return sendAuthError(error, res, next); } };
   const requireTenant = (req: Request, res: Response, next: NextFunction) => { try { requireRole((req as AuthenticatedRequest).authUser, 'TENANT'); return next(); } catch (error) { return sendAuthError(error, res, next); } };
   const requireAnyAuth = (req: Request, res: Response, next: NextFunction) => { try { requireAuthenticated((req as AuthenticatedRequest).authUser); return next(); } catch (error) { return sendAuthError(error, res, next); } };
 
@@ -111,8 +117,16 @@ export function createApp(databaseUrl?: string) {
   app.get('/admin/dashboard', requireManagement, async (req, res, next) => {
     try { return res.json(await getDashboard(db, (req as AuthenticatedRequest).authUser.organizationId)); } catch (error) { return next(error); }
   });
-  app.get('/admin/payments', requireManagement, async (req, res, next) => {
-    try { return res.json(await listOrganizationCharges(db, (req as AuthenticatedRequest).authUser.organizationId)); } catch (error) { return next(error); }
+  app.get('/admin/charges', requireManagement, async (req, res, next) => {
+    try { const status = req.query.status === undefined ? undefined : chargeStatusInput.parse(req.query.status); return res.json(await listOrganizationCharges(db, (req as AuthenticatedRequest).authUser.organizationId, status)); } catch (error) { return next(error); }
+  });
+  app.post('/admin/charges/:id/void', requireManager, async (req, res, next) => {
+    try {
+      const id = uuidParam.parse(req.params).id;
+      const organizationId = (req as AuthenticatedRequest).authUser.organizationId;
+      const [updated] = await db.update(charges).set({ status: 'VOID', updatedAt: new Date() }).where(and(eq(charges.id, id), eq(charges.organizationId, organizationId), or(eq(charges.status, 'DUE'), eq(charges.status, 'OPEN')))).returning();
+      return updated ? res.json(updated) : res.status(404).json({ error: 'Charge not found or not voidable.' });
+    } catch (error) { return next(error); }
   });
   app.get('/admin', requireManagement, (_req, res) => res.sendFile(`${clientRoot}/admin.html`));
   app.get('/admin/properties/new', requireManagement, (_req, res) => res.sendFile(`${clientRoot}/admin.html`));

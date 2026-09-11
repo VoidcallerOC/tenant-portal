@@ -32,7 +32,7 @@ try {
     hashPassword('TenantTwoDemoPassword!2026'),
   ]);
   await db.transaction(async (tx) => {
-    await tx.insert(organizations).values({ id: ids.organization, name: 'Test Property Group', slug: 'test', email: 'ops@test.example', phone: '555-0100' }).onConflictDoNothing();
+    await tx.insert(organizations).values({ id: ids.organization, name: 'Test Property Group', slug: 'test', email: 'ops@test.example', phone: '555-0100', stripeAccountId: process.env.SEED_STRIPE_ACCOUNT_ID || null }).onConflictDoNothing();
     await tx.insert(users).values([
       { id: ids.admin, organizationId: ids.organization, email: 'admin@test.example', firstName: 'Avery', lastName: 'Stone', role: 'ADMIN', passwordHash: adminPasswordHash },
       { id: ids.manager, organizationId: ids.organization, email: 'manager@test.example', firstName: 'Morgan', lastName: 'Lee', role: 'MANAGER', passwordHash: managerPasswordHash },

@@ -34,6 +34,7 @@ export const organizations = pgTable('organizations', {
   slug: text('slug').notNull(),
   email: text('email'),
   phone: text('phone'),
+  stripeAccountId: text('stripe_account_id'),
   ...timestamps,
 }, (table) => [uniqueIndex('organizations_slug_unique').on(table.slug)]);
 
