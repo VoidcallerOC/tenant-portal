@@ -1,5 +1,5 @@
 import {
-  boolean,
+  customType,
   date,
   index,
   integer,
@@ -11,6 +11,10 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() { return 'bytea'; },
+});
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -143,6 +147,21 @@ export const documents = pgTable('documents', {
   index('documents_lease_id_idx').on(table.leaseId),
 ]);
 
+export const uploads = pgTable('uploads', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  uploadedBy: uuid('uploaded_by').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+  name: text('name').notNull(),
+  mime: text('mime').notNull(),
+  kind: text('kind').notNull(),
+  bytes: bytea('bytes').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('uploads_organization_id_idx').on(table.organizationId),
+  index('uploads_tenant_id_idx').on(table.tenantId),
+]);
+
 export const sessions = pgTable('sessions', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -165,9 +184,11 @@ export const schema = {
   maintenanceRequests,
   maintenanceComments,
   documents,
+  uploads,
   sessions,
 };
 
+export type Upload = typeof uploads.$inferSelect;
 export type Organization = typeof organizations.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Property = typeof properties.$inferSelect;
