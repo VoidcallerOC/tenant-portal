@@ -20,6 +20,7 @@
       <a href="#maintenance">Maintenance</a>
       <a href="#documents">Documents</a>
       <a href="#profile">Profile</a>
+      <a href="#payments">Payments</a>
     </nav>
     <button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false">Dark mode</button>
     <button id="logout" class="logout" type="button">Sign out</button>
@@ -111,10 +112,19 @@
       </div>
       <form id="profile-form" class="tenant-panel profile-form loading">Loading…</form>
     </section>
+    <section id="payments" class="tenant-view" hidden>
+      <div class="page-heading">
+        <p class="eyebrow">Rent</p>
+        <h1>Payments</h1>
+        <p class="muted">Pay one monthly rent charge securely through Stripe Checkout.</p>
+      </div>
+      <div id="payments-list" class="pay-stack loading">Loading…</div>
+    </section>
   </main>
   <nav class="tenant-tabs" aria-label="Resident">
     <a href="#home" data-tab="home" class="active"><span class="tab-icon">⌂</span>Home</a>
     <a href="#maintenance" data-tab="maintenance"><span class="tab-icon">⚒</span>Fix</a>
+    <a href="#payments" data-tab="payments"><span class="tab-icon">$</span>Pay</a>
     <a href="#profile" data-tab="profile"><span class="tab-icon">☺</span>Me</a>
   </nav>
   <script src="/theme.js"></script>

@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { eq } from 'drizzle-orm';
 import { createDb } from './client.js';
-import { organizations, users, properties, units, tenants, leases, maintenanceRequests } from './schema.js';
+import { organizations, users, properties, units, tenants, leases, charges, maintenanceRequests } from './schema.js';
 import { hashPassword } from '../auth/password.js';
 
 const ids = {
@@ -60,6 +60,10 @@ try {
       { id: ids.leaseA, tenantId: ids.tenantA, unitId: ids.unitA1, startDate: '2026-01-01', monthlyRent: '1850.00', securityDeposit: '1850.00', status: 'ACTIVE' },
       { id: ids.leaseB, tenantId: ids.tenantB, unitId: ids.unitB1, startDate: '2026-03-01', monthlyRent: '2100.00', securityDeposit: '2100.00', status: 'ACTIVE' },
     ]).onConflictDoNothing();
+    const now = new Date();
+    const periodStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
+    const activeLeases = await tx.select({ lease: leases, tenant: tenants }).from(leases).innerJoin(tenants, eq(tenants.id, leases.tenantId)).where(eq(leases.status, 'ACTIVE'));
+    if (activeLeases.length) await tx.insert(charges).values(activeLeases.map(({ lease, tenant }) => ({ organizationId: tenant.organizationId, tenantId: tenant.id, leaseId: lease.id, periodStart, amount: lease.monthlyRent, status: 'DUE' as const }))).onConflictDoNothing({ target: [charges.leaseId, charges.periodStart] });
     await tx.insert(maintenanceRequests).values([
       { id: ids.requestA, tenantId: ids.tenantA, unitId: ids.unitA1, title: 'Kitchen faucet drips', description: 'The faucet continues to drip after the handle is closed.', priority: 'LOW', status: 'OPEN' },
       { id: ids.requestB, tenantId: ids.tenantB, unitId: ids.unitB1, title: 'Heating is intermittent', description: 'The heat cycles off unexpectedly overnight.', priority: 'HIGH', status: 'IN_PROGRESS' },

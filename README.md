@@ -55,7 +55,7 @@ These credentials are for local development only and must not be used in product
 
 Phase 3 adds the authenticated `/admin` management console. Because the repository did not contain a React or component layer, the UI is a small responsive server-served HTML/CSS/JavaScript shell under `client/`, while all data operations remain database-backed Express endpoints. The dashboard includes portfolio metrics, recent maintenance, recent tenants, and property overview cards. Property management includes validated property creation, property detail, unit creation, unit editing, and unit status changes. Tenant management includes an organization-scoped directory and tenant detail payloads with leases and maintenance requests.
 
-The dashboard API endpoints are `/admin/dashboard`, `/admin/properties`, `/admin/properties/:id`, `/admin/properties/:id/units`, `/admin/properties/:propertyId/units/:id`, `/admin/tenants`, and `/admin/tenants/:id`. Management can also create a tenant account through `POST /admin/tenants`; the server assigns the authenticated manager's organization and creates the user and tenant records in one transaction. Each endpoint uses management-role middleware and organization predicates. Empty, loading, validation, and error states are represented in the dashboard UI. Payments are not included.
+The dashboard API endpoints are `/admin/dashboard`, `/admin/payments`, `/admin/properties`, `/admin/properties/:id`, `/admin/properties/:id/units`, `/admin/properties/:propertyId/units/:id`, `/admin/tenants`, and `/admin/tenants/:id`. Management can also create a tenant account through `POST /admin/tenants`; the server assigns the authenticated manager's organization and creates the user and tenant records in one transaction. Each endpoint uses management-role middleware and organization predicates. Empty, loading, validation, and error states are represented in the dashboard UI.
 
 ## Phase 4 tenant portal
 
@@ -65,7 +65,11 @@ Tenant APIs never accept a tenant ID from the client. They derive the tenant rec
 
 Management can assign a tenant to an organization-owned unit and create an active or pending lease from the tenant directory. The server verifies both tenant and unit ownership, rejects conflicting active leases, and marks an actively leased unit occupied.
 
-The management and tenant consoles include a non-functional **Payments** placeholder so the future billing workflow has a reserved location in the UI. It currently performs no payment actions, stores no payment data, exposes no payment API, and has no Stripe dependency. When payment work is approved, the planned configuration points are `STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, and `STRIPE_WEBHOOK_SECRET`; these must be supplied through the deployment environment rather than committed to the repository.
+## Live rent payments
+
+The tenant portal exposes `GET /tenant/payments` and `POST /tenant/payments/checkout`. Checkout creates exactly one current-calendar-month charge per active lease, keyed by `(leaseId, periodStart)`, and sends the resident to Stripe Checkout with card and US bank-account payment methods. The client never marks a charge paid. The signed `POST /stripe/webhook` endpoint is the only path that transitions a charge to `PAID`, including asynchronous ACH success; failed and expired Checkout sessions are recorded as `FAILED` and `VOID` respectively. The manager console reads organization-scoped charges through `GET /admin/payments`.
+
+Configure `DATABASE_URL`, `PUBLIC_APP_URL`, `STRIPE_SECRET_KEY`, and `STRIPE_WEBHOOK_SECRET` in the deployment environment. Optional `STRIPE_SUCCESS_URL` and `STRIPE_CANCEL_URL` values override the default resident return URLs. Register the deployed `/stripe/webhook` URL in Stripe for `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, and `payment_intent.payment_failed` events. No Stripe secrets are stored in the repository.
 
 ## Phase 1 status
 

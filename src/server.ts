@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { and, asc, desc, eq } from 'drizzle-orm';
+import Stripe from 'stripe';
 import { createDb } from './db/client.js';
 import { documents, leases, maintenanceComments, maintenanceRequests, properties, tenants, units, users } from './db/schema.js';
 import { AuthError, requireAuthenticated, requireRole } from './auth/authorization.js';
@@ -12,6 +13,7 @@ import { getDashboard, getPropertyDetail, listProperties } from './management/qu
 import { leaseCreateInput, propertyCreateInput, tenantCreateInput, unitCreateInput, unitUpdateInput, uuidParam } from './management/validation.js';
 import { getTenantContext, getTenantDocuments, tenantDashboard } from './tenant/queries.js';
 import { tenantMaintenanceInput, tenantProfileUpdateInput } from './tenant/validation.js';
+import { applyStripeChargeEvent, createTenantCheckoutSession, listOrganizationCharges, listTenantCharges, stripe } from './payments/service.js';
 
 const loginInput = z.object({ email: z.string().trim().email(), password: z.string().min(1) }).strict();
 const idInput = z.string().uuid();
@@ -42,6 +44,32 @@ export function createApp(databaseUrl?: string) {
   app.disable('x-powered-by');
   const clientRoot = fileURLToPath(new URL('../client/', import.meta.url));
   app.use(express.static(clientRoot, { index: false }));
+
+  app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+    const signature = req.headers['stripe-signature'];
+    if (typeof signature !== 'string' || !process.env.STRIPE_WEBHOOK_SECRET) return res.status(400).send('Webhook signature is required.');
+    let event: Stripe.Event;
+    try { event = stripe().webhooks.constructEvent(req.body as Buffer, signature, process.env.STRIPE_WEBHOOK_SECRET); } catch { return res.status(400).send('Invalid webhook signature.'); }
+    try {
+      const object = event.data.object as Stripe.Checkout.Session | Stripe.PaymentIntent;
+      const metadata = object.metadata as Record<string, string> | null | undefined;
+      if (metadata?.chargeId && metadata.organizationId && metadata.tenantId && metadata.leaseId && metadata.periodStart) {
+        const chargeMetadata = { chargeId: metadata.chargeId, organizationId: metadata.organizationId, tenantId: metadata.tenantId, leaseId: metadata.leaseId, periodStart: metadata.periodStart };
+        if (event.type === 'checkout.session.completed') {
+          const session = object as Stripe.Checkout.Session;
+          if (session.payment_status === 'paid') await applyStripeChargeEvent(db, chargeMetadata, 'PAID', typeof session.payment_intent === 'string' ? session.payment_intent : null);
+        } else if (event.type === 'checkout.session.async_payment_succeeded') {
+          const session = object as Stripe.Checkout.Session;
+          await applyStripeChargeEvent(db, chargeMetadata, 'PAID', typeof session.payment_intent === 'string' ? session.payment_intent : null);
+        } else if (event.type === 'checkout.session.async_payment_failed' || event.type === 'payment_intent.payment_failed') {
+          await applyStripeChargeEvent(db, chargeMetadata, 'FAILED', null);
+        } else if (event.type === 'checkout.session.expired') {
+          await applyStripeChargeEvent(db, chargeMetadata, 'VOID', null);
+        }
+      }
+      return res.json({ received: true });
+    } catch (error) { console.error(error); return res.status(500).json({ error: 'Webhook processing failed.' }); }
+  });
 
   app.use(express.json({ limit: '100kb' }));
 
@@ -81,6 +109,9 @@ export function createApp(databaseUrl?: string) {
 
   app.get('/admin/dashboard', requireManagement, async (req, res, next) => {
     try { return res.json(await getDashboard(db, (req as AuthenticatedRequest).authUser.organizationId)); } catch (error) { return next(error); }
+  });
+  app.get('/admin/payments', requireManagement, async (req, res, next) => {
+    try { return res.json(await listOrganizationCharges(db, (req as AuthenticatedRequest).authUser.organizationId)); } catch (error) { return next(error); }
   });
   app.get('/admin', requireManagement, (_req, res) => res.sendFile(`${clientRoot}/admin.html`));
   app.get('/admin/properties/new', requireManagement, (_req, res) => res.sendFile(`${clientRoot}/admin.html`));
@@ -202,6 +233,18 @@ export function createApp(databaseUrl?: string) {
   });
 
   app.get('/tenant', requireTenant, (_req, res) => res.sendFile(`${clientRoot}/tenant.html`));
+  app.get('/tenant/payments', requireTenant, async (req, res, next) => {
+    try { return res.json(await listTenantCharges(db, (req as AuthenticatedRequest).authUser.id)); } catch (error) { return next(error); }
+  });
+  app.post('/tenant/payments/checkout', requireTenant, async (req, res, next) => {
+    try {
+      const result = await createTenantCheckoutSession(db, (req as AuthenticatedRequest).authUser.id);
+      if (result.kind === 'not_found') return res.status(404).json({ error: 'Resource not found.' });
+      if (result.kind === 'paid') return res.status(409).json({ error: 'This month\'s rent is already paid.' });
+      if (!result.url) return res.status(503).json({ error: 'Stripe Checkout is unavailable.' });
+      return res.json({ url: result.url });
+    } catch (error) { return next(error); }
+  });
   app.get('/tenant/dashboard', requireTenant, async (req, res, next) => {
     try { const context = await getTenantContext(db, (req as AuthenticatedRequest).authUser.id); return context ? res.json(tenantDashboard(context)) : res.status(404).json({ error: 'Resource not found.' }); } catch (error) { return next(error); }
   });

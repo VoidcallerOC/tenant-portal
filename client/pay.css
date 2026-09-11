@@ -23,13 +23,4 @@
 .pay-method:last-of-type { border: 0; }
 .pay-method label { color: var(--ink); font-weight: 700; font-size: 14px; }
 .pay-method small { display: block; color: var(--muted); font-weight: 500; margin-top: 3px; }
-.mock-banner {
-  background: #f4eee0;
-  border: 1px solid #eee2c8;
-  color: var(--gold);
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-size: 13px;
-  font-weight: 700;
-}
 .pay-receipt { margin-top: 8px; }

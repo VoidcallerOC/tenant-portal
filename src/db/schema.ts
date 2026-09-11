@@ -26,6 +26,7 @@ export const unitStatus = pgEnum('unit_status', ['VACANT', 'OCCUPIED', 'MAINTENA
 export const leaseStatus = pgEnum('lease_status', ['ACTIVE', 'EXPIRED', 'PENDING', 'TERMINATED']);
 export const maintenancePriority = pgEnum('maintenance_priority', ['LOW', 'MEDIUM', 'HIGH', 'EMERGENCY']);
 export const maintenanceStatus = pgEnum('maintenance_status', ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']);
+export const chargeStatus = pgEnum('charge_status', ['DUE', 'OPEN', 'PAID', 'FAILED', 'VOID']);
 
 export const organizations = pgTable('organizations', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -102,6 +103,26 @@ export const leases = pgTable('leases', {
   index('leases_tenant_id_idx').on(table.tenantId),
   index('leases_unit_id_idx').on(table.unitId),
   index('leases_status_idx').on(table.status),
+]);
+
+export const charges = pgTable('charges', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  leaseId: uuid('lease_id').notNull().references(() => leases.id, { onDelete: 'restrict' }),
+  periodStart: date('period_start').notNull(),
+  amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+  status: chargeStatus('status').notNull().default('DUE'),
+  stripeCheckoutSessionId: text('stripe_checkout_session_id'),
+  stripePaymentIntentId: text('stripe_payment_intent_id'),
+  paidAt: timestamp('paid_at', { withTimezone: true }),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex('charges_lease_period_unique').on(table.leaseId, table.periodStart),
+  index('charges_organization_id_idx').on(table.organizationId),
+  index('charges_tenant_id_idx').on(table.tenantId),
+  index('charges_lease_id_idx').on(table.leaseId),
+  index('charges_status_idx').on(table.status),
 ]);
 
 export const maintenanceRequests = pgTable('maintenance_requests', {
@@ -181,6 +202,7 @@ export const schema = {
   units,
   tenants,
   leases,
+  charges,
   maintenanceRequests,
   maintenanceComments,
   documents,
@@ -195,6 +217,7 @@ export type Property = typeof properties.$inferSelect;
 export type Unit = typeof units.$inferSelect;
 export type Tenant = typeof tenants.$inferSelect;
 export type Lease = typeof leases.$inferSelect;
+export type Charge = typeof charges.$inferSelect;
 export type MaintenanceRequest = typeof maintenanceRequests.$inferSelect;
 export type MaintenanceComment = typeof maintenanceComments.$inferSelect;
 export type Document = typeof documents.$inferSelect;
