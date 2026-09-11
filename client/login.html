@@ -1,13 +1,25 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign in · Test</title><link rel="stylesheet" href="/login.css"></head>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · Resident portal</title>
+  <link rel="stylesheet" href="/login.css">
+</head>
 <body>
   <main class="login-shell">
     <section class="login-card" aria-labelledby="login-title">
-      <p class="eyebrow">Test</p>
+      <div class="login-brand">
+        <span class="home-icon">⌂</span>
+        <div>
+          <strong>Test</strong>
+          <small>Property portal</small>
+        </div>
+      </div>
+      <p class="eyebrow">Welcome back</p>
       <h1 id="login-title">Sign in to your portal</h1>
       <p class="muted">Use the credentials provided by your property team.</p>
-      <div id="error" class="alert" role="alert" aria-live="polite" hidden></div>
+      <div id="error" class="alert error" role="alert" aria-live="polite" hidden></div>
       <form id="login-form">
         <label>Email<input name="email" type="email" autocomplete="username" required></label>
         <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
