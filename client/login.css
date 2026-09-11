@@ -65,7 +65,7 @@ input {
   border: 1px solid var(--line);
   border-radius: 7px;
   color: var(--ink);
-  background: #fff;
+  background: var(--field);
 }
 input:focus {
   outline: 3px solid var(--focus);
