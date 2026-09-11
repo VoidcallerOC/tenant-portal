@@ -116,8 +116,25 @@ body {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 13px;
-  margin: 18px 0 22px;
+  margin: 18px 0 14px;
 }
+.shortcut-row {
+  display: flex;
+  gap: 10px;
+  margin: 0 0 22px;
+  flex-wrap: wrap;
+}
+.shortcut-row a {
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--teal-dark);
+  text-decoration: none;
+  border-radius: 99px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.shortcut-row a:hover { border-color: #a9c5b5; background: var(--mint); }
 .quick-stat, .tenant-panel, .request-card {
   background: var(--card);
   border: 1px solid var(--line);
@@ -231,17 +248,33 @@ body {
 }
 .loading { color: var(--muted); font-size: 13px; }
 #maintenance-detail { margin-top: 20px; }
+.tenant-tabs { display: none; }
 @media (max-width: 900px) {
   .quick-stats { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 760px) {
-  body { display: block; }
-  .tenant-nav { position: static; width: 100%; padding: 16px; gap: 17px; }
-  .tenant-nav nav { display: flex; overflow-x: auto; scrollbar-width: thin; }
-  .tenant-nav nav a { white-space: nowrap; }
-  .logout { margin: 0; }
-  .tenant-main { width: 100%; margin: 0; padding: 28px 16px; }
-  .tenant-top { margin-bottom: 25px; }
+  body { display: block; padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .tenant-nav {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    width: 100%;
+    padding: 12px 16px;
+    gap: 0;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .side-nav { display: none; }
+  .logout {
+    margin: 0;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+  .tenant-main { width: 100%; margin: 0; padding: 22px 16px 12px; }
+  .tenant-top { margin-bottom: 20px; }
   .resident-chip strong { display: none; }
   .quick-stats, .tenant-grid, .profile-form, .form-grid { grid-template-columns: 1fr; }
   .lease-summary { grid-template-columns: 1fr; }
@@ -249,4 +282,34 @@ body {
   .request-card { display: block; }
   .request-card .badge { margin-top: 13px; }
   .tenant-panel { padding: 18px; }
+  .tenant-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    background: #fff;
+    border-top: 1px solid var(--line);
+    padding: 8px 6px calc(8px + env(safe-area-inset-bottom));
+    box-shadow: 0 -8px 24px rgb(44 94 61 / 6%);
+  }
+  .tenant-tabs a {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    color: #6b7872;
+    text-decoration: none;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 6px 4px;
+    border-radius: 10px;
+  }
+  .tenant-tabs a.active {
+    color: var(--teal-dark);
+    background: var(--mint);
+  }
+  .tab-icon { font-size: 18px; line-height: 1; }
 }
