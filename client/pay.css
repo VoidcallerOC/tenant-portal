@@ -1,0 +1,35 @@
+.pay-stack { display: grid; gap: 16px; }
+.pay-due {
+  background: var(--teal-dark);
+  color: #fff;
+  border-radius: 16px;
+  padding: 24px 26px;
+  box-shadow: 0 13px 30px rgb(32 91 78 / 12%);
+}
+.pay-due p { margin: 0; color: #c9e1d7; font-size: 13px; }
+.pay-due h2 { margin: 8px 0 6px; font-size: clamp(28px, 4vw, 40px); letter-spacing: -.04em; }
+.pay-methods {
+  display: grid;
+  gap: 10px;
+}
+.pay-method {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #edf2ee;
+}
+.pay-method:last-of-type { border: 0; }
+.pay-method label { color: var(--ink); font-weight: 700; font-size: 14px; }
+.pay-method small { display: block; color: var(--muted); font-weight: 500; margin-top: 3px; }
+.mock-banner {
+  background: #f4eee0;
+  border: 1px solid #eee2c8;
+  color: var(--gold);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.pay-receipt { margin-top: 8px; }
