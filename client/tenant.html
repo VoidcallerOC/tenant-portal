@@ -19,7 +19,6 @@
       <a href="#maintenance">Maintenance</a>
       <a href="#documents">Documents</a>
       <a href="#profile">Profile</a>
-      <a href="#payments">Payments</a>
     </nav>
     <button id="logout" class="logout" type="button">Sign out</button>
   </aside>
@@ -81,6 +80,7 @@
         <label>Title<input name="title" required maxlength="200" placeholder="e.g. Leaking kitchen sink"></label>
         <label>Description<textarea name="description" required maxlength="10000" rows="4" placeholder="Tell us what happened and where."></textarea></label>
         <label>Priority<select name="priority"><option>LOW</option><option selected>MEDIUM</option><option>HIGH</option><option>EMERGENCY</option></select></label>
+        <label>Photo URL (optional)<input name="photoUrl" type="url" maxlength="2048" placeholder="https://example.com/photo.jpg"><small>Paste a photo link for now. Uploads come later.</small></label>
         <div class="form-actions">
           <span id="maintenance-status" class="muted"></span>
           <button class="primary">Submit request</button>
@@ -109,19 +109,10 @@
       </div>
       <form id="profile-form" class="tenant-panel profile-form loading">Loading…</form>
     </section>
-    <section id="payments" class="tenant-view" hidden>
-      <div class="page-heading">
-        <p class="eyebrow">Billing preview</p>
-        <h1>Payments</h1>
-        <p class="muted">Demo only. No card is charged and nothing is stored on the server.</p>
-      </div>
-      <div id="payments-board" class="loading">Loading…</div>
-    </section>
   </main>
   <nav class="tenant-tabs" aria-label="Resident">
     <a href="#home" data-tab="home" class="active"><span class="tab-icon">⌂</span>Home</a>
     <a href="#maintenance" data-tab="maintenance"><span class="tab-icon">⚒</span>Fix</a>
-    <a href="#payments" data-tab="payments"><span class="tab-icon">$</span>Pay</a>
     <a href="#profile" data-tab="profile"><span class="tab-icon">☺</span>Me</a>
   </nav>
   <script src="/tenant.js"></script>

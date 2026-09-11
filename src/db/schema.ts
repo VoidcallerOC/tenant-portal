@@ -106,6 +106,7 @@ export const maintenanceRequests = pgTable('maintenance_requests', {
   unitId: uuid('unit_id').notNull().references(() => units.id, { onDelete: 'restrict' }),
   title: text('title').notNull(),
   description: text('description').notNull(),
+  photoUrl: text('photo_url'),
   priority: maintenancePriority('priority').notNull().default('MEDIUM'),
   status: maintenanceStatus('status').notNull().default('OPEN'),
   resolvedAt: timestamp('resolved_at', { withTimezone: true }),

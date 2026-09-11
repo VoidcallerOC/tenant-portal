@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { requireRole, requireSameTenantUser } from '../src/auth/authorization.js';
 import { publicUser, tenantDashboard } from '../src/tenant/queries.js';
-import { tenantProfileUpdateInput } from '../src/tenant/validation.js';
+import { tenantMaintenanceInput, tenantProfileUpdateInput } from '../src/tenant/validation.js';
 
 describe('tenant portal ownership policy', () => {
   it('allows only the authenticated tenant role into the tenant application', () => {
@@ -30,6 +30,13 @@ describe('tenant portal ownership policy', () => {
   it('validates only editable tenant contact fields', () => {
     expect(tenantProfileUpdateInput.parse({ phone: '555-0199', emergencyName: null, emergencyPhone: null })).toEqual({ phone: '555-0199', emergencyName: null, emergencyPhone: null });
     expect(() => tenantProfileUpdateInput.parse({ organizationId: 'other-org', phone: null, emergencyName: null, emergencyPhone: null })).toThrow();
+  });
+
+  it('accepts optional HTTP(S) maintenance photos and normalizes blank values', () => {
+    expect(tenantMaintenanceInput.parse({ title: 'Leaking sink', description: 'Water under the cabinet', priority: 'HIGH', photoUrl: '  https://example.com/sink.jpg  ' })).toMatchObject({ photoUrl: 'https://example.com/sink.jpg' });
+    expect(tenantMaintenanceInput.parse({ title: 'Leaking sink', description: 'Water under the cabinet', photoUrl: '' })).toMatchObject({ photoUrl: null });
+    expect(() => tenantMaintenanceInput.parse({ title: 'Leaking sink', description: 'Water under the cabinet', photoUrl: 'ftp://example.com/sink.jpg' })).toThrow();
+    expect(() => tenantMaintenanceInput.parse({ title: 'Leaking sink', description: 'Water under the cabinet', photoUrl: 'https://example.com/'.padEnd(2050, 'x') })).toThrow();
   });
 
   it('does not expose organization or password fields in public user responses', () => {

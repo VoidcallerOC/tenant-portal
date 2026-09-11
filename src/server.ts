@@ -11,15 +11,10 @@ import { authenticate, createSession, getUserForSession, revokeSession, SESSION_
 import { getDashboard, getPropertyDetail, listProperties } from './management/queries.js';
 import { leaseCreateInput, propertyCreateInput, tenantCreateInput, unitCreateInput, unitUpdateInput, uuidParam } from './management/validation.js';
 import { getTenantContext, getTenantDocuments, tenantDashboard } from './tenant/queries.js';
-import { tenantProfileUpdateInput } from './tenant/validation.js';
+import { tenantMaintenanceInput, tenantProfileUpdateInput } from './tenant/validation.js';
 
 const loginInput = z.object({ email: z.string().trim().email(), password: z.string().min(1) }).strict();
 const idInput = z.string().uuid();
-const tenantMaintenanceInput = z.object({
-  title: z.string().trim().min(1).max(200),
-  description: z.string().trim().min(1).max(10_000),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'EMERGENCY']).default('MEDIUM'),
-}).strict();
 const maintenanceCommentInput = z.object({ body: z.string().trim().min(1).max(5_000) }).strict();
 const maintenanceStatusInput = z.object({ status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']) }).strict();
 const maintenanceFilterInput = z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']);
@@ -187,7 +182,12 @@ export function createApp(databaseUrl?: string) {
       const id = idInput.parse(req.params.id); const input = maintenanceStatusInput.parse(req.body); const user = (req as AuthenticatedRequest).authUser;
       const owned = await db.select({ request: maintenanceRequests }).from(maintenanceRequests).innerJoin(tenants, eq(tenants.id, maintenanceRequests.tenantId)).innerJoin(units, eq(units.id, maintenanceRequests.unitId)).innerJoin(properties, eq(properties.id, units.propertyId)).where(and(eq(maintenanceRequests.id, id), eq(tenants.organizationId, user.organizationId), eq(properties.organizationId, user.organizationId))).limit(1);
       if (!owned[0]) return res.status(404).json({ error: 'Resource not found.' });
-      const [updated] = await db.update(maintenanceRequests).set({ status: input.status, resolvedAt: input.status === 'RESOLVED' ? new Date() : null, updatedAt: new Date() }).where(eq(maintenanceRequests.id, id)).returning();
+      const updated = await db.transaction(async (tx) => {
+        const [request] = await tx.update(maintenanceRequests).set({ status: input.status, resolvedAt: input.status === 'RESOLVED' ? new Date() : null, updatedAt: new Date() }).where(eq(maintenanceRequests.id, id)).returning();
+        if (!request) return undefined;
+        await tx.insert(maintenanceComments).values({ maintenanceRequestId: id, userId: user.id, body: `${user.firstName} ${user.lastName} marked this ${input.status}.` });
+        return request;
+      });
       return updated ? res.json(updated) : res.status(404).json({ error: 'Resource not found.' });
     } catch (error) { return next(error); }
   });
@@ -212,8 +212,8 @@ export function createApp(databaseUrl?: string) {
       const tenant = await tenantForUser(db, user.id);
       if (!tenant) return res.status(404).json({ error: 'Resource not found.' });
       const unitRows = await db.select({ unit: units }).from(units).innerJoin(leases, eq(leases.unitId, units.id)).innerJoin(properties, eq(properties.id, units.propertyId)).where(and(eq(leases.tenantId, tenant.id), eq(leases.status, 'ACTIVE'), eq(properties.organizationId, tenant.organizationId))).orderBy(desc(leases.startDate)).limit(1);
-      if (!unitRows[0]) return res.status(404).json({ error: 'Resource not found.' });
-      const [created] = await db.insert(maintenanceRequests).values({ tenantId: tenant.id, unitId: unitRows[0].unit.id, title: input.title, description: input.description, priority: input.priority }).returning();
+      if (!unitRows[0]) return res.status(409).json({ error: 'An active lease is required to submit a maintenance request.' });
+      const [created] = await db.insert(maintenanceRequests).values({ tenantId: tenant.id, unitId: unitRows[0].unit.id, title: input.title, description: input.description, photoUrl: input.photoUrl ?? null, priority: input.priority }).returning();
       return res.status(201).json(created);
     } catch (error) { return next(error); }
   });

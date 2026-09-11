@@ -107,6 +107,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   margin-bottom: 20px;
 }
 .panel { padding: 23px; }
+.maintenance-photo { display: block; max-width: 100%; max-height: 420px; margin-top: 16px; border-radius: var(--radius); object-fit: contain; }
 .panel-head, .section-head {
   display: flex;
   justify-content: space-between;
