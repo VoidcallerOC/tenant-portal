@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>Resident portal</title>
   <link rel="stylesheet" href="/tenant.css">
 </head>
@@ -12,7 +12,7 @@
       <span class="home-icon">⌂</span>
       <div><strong>Test</strong><small>Resident portal</small></div>
     </div>
-    <nav>
+    <nav class="side-nav">
       <a href="#home" class="active">Home</a>
       <a href="#lease">My lease</a>
       <a href="#maintenance">Maintenance</a>
@@ -38,6 +38,10 @@
     <section id="home" class="tenant-view">
       <div id="hero" class="hero loading">Loading your home…</div>
       <div id="quick-stats" class="quick-stats"></div>
+      <div class="shortcut-row">
+        <a href="#lease">My lease</a>
+        <a href="#documents">Documents</a>
+      </div>
       <div class="tenant-grid">
         <article class="tenant-panel">
           <div class="panel-head">
@@ -98,6 +102,10 @@
         <h1>Your profile</h1>
         <p class="muted">Keep your contact and emergency information current.</p>
       </div>
+      <div class="shortcut-row">
+        <a href="#lease">My lease</a>
+        <a href="#documents">Documents</a>
+      </div>
       <form id="profile-form" class="tenant-panel profile-form loading">Loading…</form>
     </section>
     <section id="payments" class="tenant-view" hidden>
@@ -113,6 +121,12 @@
       </article>
     </section>
   </main>
+  <nav class="tenant-tabs" aria-label="Resident">
+    <a href="#home" data-tab="home" class="active"><span class="tab-icon">⌂</span>Home</a>
+    <a href="#maintenance" data-tab="maintenance"><span class="tab-icon">⚒</span>Fix</a>
+    <a href="#payments" data-tab="payments"><span class="tab-icon">$</span>Pay</a>
+    <a href="#profile" data-tab="profile"><span class="tab-icon">☺</span>Me</a>
+  </nav>
   <script src="/tenant.js"></script>
 </body>
 </html>
