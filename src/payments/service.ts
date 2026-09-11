@@ -12,6 +12,10 @@ export type ChargeEventMetadata = {
 };
 
 let stripeClient: Stripe | undefined;
+export function isDemoPayments() {
+  return process.env.PAYMENTS_MODE === 'demo' || !process.env.STRIPE_SECRET_KEY;
+}
+
 export function stripe() {
   if (!stripeClient) {
     if (!process.env.STRIPE_SECRET_KEY) throw new Error('Stripe is not configured.');
@@ -93,6 +97,16 @@ export async function createTenantCheckoutSession(db: Db, userId: string, charge
   if (!charge) throw new Error('Unable to create rent charge.');
   if (charge.status === 'PAID') return { kind: 'paid' as const, charge };
   if (charge.status !== 'DUE' && charge.status !== 'OPEN') return { kind: 'not_payable' as const, charge };
+  if (isDemoPayments()) {
+    const [updated] = await db.update(charges).set({
+      status: 'PAID',
+      paidAt: new Date(),
+      stripeCheckoutSessionId: charge.stripeCheckoutSessionId ?? `demo_cs_${charge.id}`,
+      stripePaymentIntentId: `demo_pi_${charge.id}`,
+      updatedAt: new Date(),
+    }).where(and(eq(charges.id, charge.id), eq(charges.organizationId, context.tenant.organizationId), eq(charges.tenantId, context.tenant.id))).returning();
+    return { kind: 'checkout' as const, charge: updated ?? charge, url: '/tenant#pay', demo: true as const };
+  }
   const client = stripe();
   if (charge.status === 'OPEN' && charge.stripeCheckoutSessionId) {
     const existing = await client.checkout.sessions.retrieve(charge.stripeCheckoutSessionId);
@@ -126,7 +140,7 @@ export async function listTenantCharges(db: Db, userId: string) {
     .where(and(eq(charges.tenantId, tenants.id), eq(tenants.userId, userId), eq(charges.organizationId, tenants.organizationId), eq(properties.organizationId, tenants.organizationId)))
     .orderBy(desc(charges.periodStart), desc(charges.createdAt))
     .limit(12);
-  return rows.map((row) => ({ ...row, dueDate: dueDateForPeriod(row.lease.startDate, row.charge.periodStart) }));
+  return rows.map((row) => ({ ...row, dueDate: dueDateForPeriod(row.lease.startDate, row.charge.periodStart), demo: isDemoPayments() }));
 }
 
 export async function listOrganizationCharges(db: Db, organizationId: string, status?: 'DUE' | 'OPEN' | 'PAID' | 'FAILED' | 'VOID') {
@@ -139,7 +153,7 @@ export async function listOrganizationCharges(db: Db, organizationId: string, st
     .innerJoin(properties, eq(properties.id, units.propertyId))
     .where(and(eq(charges.organizationId, organizationId), eq(tenants.organizationId, organizationId), eq(users.organizationId, organizationId), eq(properties.organizationId, organizationId), status ? eq(charges.status, status) : undefined))
     .orderBy(desc(charges.periodStart), asc(users.lastName), asc(users.firstName));
-  return rows.map((row) => ({ ...row, dueDate: dueDateForPeriod(row.lease.startDate, row.charge.periodStart) }));
+  return rows.map((row) => ({ ...row, dueDate: dueDateForPeriod(row.lease.startDate, row.charge.periodStart), demo: isDemoPayments() }));
 }
 
 export async function applyStripeChargeEvent(db: Db, input: { metadata: ChargeEventMetadata | undefined; sessionId: string | undefined }, status: 'PAID' | 'FAILED' | 'VOID', paymentIntentId?: string | null) {
