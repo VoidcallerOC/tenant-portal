@@ -25,9 +25,17 @@ function route(){
   const id=focusForm?'maintenance':hash;
   show(id,focusForm);
 }
+function tabFor(id){
+  if(id==='maintenance') return 'maintenance';
+  if(id==='payments') return 'payments';
+  if(id==='profile'||id==='documents') return 'profile';
+  return 'home';
+}
 function show(id,focusForm){
   document.querySelectorAll('.tenant-view').forEach(v=>v.hidden=v.id!==id);
-  document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('active',a.getAttribute('href')==='#'+id));
+  document.querySelectorAll('.side-nav a').forEach(a=>a.classList.toggle('active',a.getAttribute('href')==='#'+id));
+  const tab=tabFor(id);
+  document.querySelectorAll('.tenant-tabs a').forEach(a=>a.classList.toggle('active',a.dataset.tab===tab));
   if(id==='home')loadHome();
   if(id==='lease')loadLease();
   if(id==='maintenance')loadMaintenance().then(()=>{if(focusForm) focusMaintenanceForm()});
