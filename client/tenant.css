@@ -55,18 +55,20 @@ body {
 .tenant-nav nav a:hover { transform: translateX(2px); }
 .logout {
   margin-top: auto;
-  border: 1px solid var(--line);
-  color: var(--muted);
-  background: #fff;
+  border: 1px solid var(--teal-dark);
+  color: #fff;
+  background: var(--teal-dark);
   border-radius: var(--radius-sm);
   padding: 11px;
   cursor: pointer;
 }
 .logout:hover {
-  border-color: #a9c5b5;
-  color: var(--teal-dark);
-  background: #f8fbf8;
+  border-color: var(--nav-active);
+  color: #fff;
+  background: var(--nav-active);
 }
+html[data-theme="dark"] .logout { border-color: #a9e2d1; color: #10211c; background: #a9e2d1; }
+html[data-theme="dark"] .logout:hover { border-color: #c6f0e2; color: #10211c; background: #c6f0e2; }
 .tenant-main {
   margin-left: 245px;
   width: calc(100% - 245px);
@@ -135,6 +137,10 @@ body {
   font-weight: 700;
 }
 .shortcut-row a:hover { border-color: #a9c5b5; background: var(--mint); }
+.theme-toggle { border-color: var(--teal-dark); background: var(--teal-dark); color: #fff; }
+html[data-theme="dark"] .theme-toggle { border-color: #a9e2d1; background: #a9e2d1; color: #10211c; }
+.theme-toggle:hover { border-color: var(--nav-active); background: var(--nav-active); color: #fff; }
+html[data-theme="dark"] .theme-toggle:hover { border-color: #c6f0e2; background: #c6f0e2; color: #10211c; }
 .quick-stat, .tenant-panel, .request-card {
   background: var(--card);
   border: 1px solid var(--line);
