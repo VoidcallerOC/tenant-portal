@@ -67,31 +67,27 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .muted { color: var(--muted); font-size: 14px; margin: 0; line-height: 1.55; }
 .primary {
   border: 0;
-  background: var(--teal-dark);
-  color: #fff;
+  background: #0b332b !important;
+  color: #ffffff !important;
   border-radius: var(--radius-sm);
   padding: 11px 16px;
   font-weight: 750;
   cursor: pointer;
   transition: background .18s ease, transform .18s ease;
 }
-.primary:hover { background: var(--nav-active); transform: translateY(-1px); }
+.primary:hover { background: #061f1a !important; color: #ffffff !important; transform: translateY(-1px); }
 .primary:disabled { cursor: wait; opacity: .65; transform: none; }
 .button {
   display: inline-block;
-  background: var(--teal-dark);
-  color: #fff;
+  background: #0b332b !important;
+  color: #ffffff !important;
   padding: 11px 15px;
   border-radius: 7px;
   text-decoration: none;
   font-size: 13px;
   font-weight: 750;
 }
-.button:hover { filter: brightness(1.08); }
-html[data-theme="dark"] .primary,
-html[data-theme="dark"] .button { background: #a9e2d1; color: #10211c; }
-html[data-theme="dark"] .primary:hover,
-html[data-theme="dark"] .button:hover { background: #c6f0e2; color: #10211c; }
+.button:hover { background: #061f1a !important; color: #ffffff !important; }
 .alert { padding: 13px; border-radius: var(--radius-sm); margin-bottom: 18px; }
 .error { background: #ffe8e5; color: #8f3b34; }
 html[data-theme="dark"] .error { background: #4a2420; color: #ffc7c1; }
@@ -136,10 +132,14 @@ input, select, textarea {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+  background: #0b332b !important;
+  color: #ffffff !important;
+  border-color: #0b332b !important;
+  font-weight: 800;
 }
 html[data-theme="dark"] .theme-toggle {
-  background: #1a2a25;
-  color: #f3faf7;
-  border-color: #4a635a;
+  background: #0b332b !important;
+  color: #ffffff !important;
+  border-color: #0b332b !important;
 }
-.theme-toggle:hover { border-color: var(--teal); }
+.theme-toggle:hover { background: #061f1a !important; color: #ffffff !important; border-color: #061f1a !important; }
