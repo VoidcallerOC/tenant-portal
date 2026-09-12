@@ -61,7 +61,7 @@ The dashboard API endpoints are `/admin/dashboard`, `/admin/charges`, `/admin/pr
 
 ## Phase 4 tenant portal
 
-Phase 4 adds the resident-facing `/tenant` portal with a separate visual language and navigation model from the management console. The portal provides a home dashboard, lease details, maintenance list, document list, and editable contact/emergency information. The dashboard shows the resident name, property, unit, lease status and end date, monthly rent, and open maintenance count.
+Phase 4 adds the resident-facing `/tenant` portal with a separate visual language and navigation model from the management console. The portal provides a home dashboard, lease details, maintenance list, document list, and editable contact/emergency information. The dashboard shows the resident name, property, unit, lease status and end date, monthly rent, and open maintenance count. Primary actions, sign-out, and theme controls use high-contrast color pairs in both light and dark modes.
 
 Tenant APIs never accept a tenant ID from the client. They derive the tenant record from the authenticated session user ID, then constrain lease, unit, property, maintenance, document, and profile queries to that tenant. Documents must match both the tenant and one of that tenant's leases. Profile updates only accept phone and emergency-contact fields. If no documents are associated with the tenant's leases, the portal displays a safe empty state; file upload and object-storage infrastructure have not been invented.
 
