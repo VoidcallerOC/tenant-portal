@@ -66,6 +66,14 @@ async function currentTenantLease(db: Db, userId: string) {
   return rows[0] ?? null;
 }
 
+async function ensureCurrentCharge(db: Db, context: NonNullable<Awaited<ReturnType<typeof currentTenantLease>>>, periodStart = currentPeriodStart()) {
+  const existingRows = await db.select().from(charges).where(and(eq(charges.organizationId, context.tenant.organizationId), eq(charges.tenantId, context.tenant.id), eq(charges.leaseId, context.lease.id), eq(charges.periodStart, periodStart))).limit(1);
+  const existing = existingRows[0];
+  if (existing) return existing;
+  const inserted = await db.insert(charges).values({ organizationId: context.tenant.organizationId, tenantId: context.tenant.id, leaseId: context.lease.id, periodStart, amount: context.lease.monthlyRent, status: 'DUE' }).onConflictDoNothing({ target: [charges.leaseId, charges.periodStart] }).returning();
+  return inserted[0] ?? (await db.select().from(charges).where(and(eq(charges.organizationId, context.tenant.organizationId), eq(charges.tenantId, context.tenant.id), eq(charges.leaseId, context.lease.id), eq(charges.periodStart, periodStart))).limit(1))[0];
+}
+
 export async function createTenantCheckoutSession(db: Db, userId: string, chargeId?: string) {
   let context = await currentTenantLease(db, userId);
   if (!context) return { kind: 'not_found' as const };
@@ -87,12 +95,7 @@ export async function createTenantCheckoutSession(db: Db, userId: string, charge
     charge = selected[0].charge;
     periodStart = charge.periodStart;
   } else {
-    const existingRows = await db.select().from(charges).where(and(eq(charges.organizationId, context.tenant.organizationId), eq(charges.tenantId, context.tenant.id), eq(charges.leaseId, context.lease.id), eq(charges.periodStart, periodStart))).limit(1);
-    charge = existingRows[0];
-    if (!charge) {
-      const inserted = await db.insert(charges).values({ organizationId: context.tenant.organizationId, tenantId: context.tenant.id, leaseId: context.lease.id, periodStart, amount: context.lease.monthlyRent, status: 'DUE' }).onConflictDoNothing({ target: [charges.leaseId, charges.periodStart] }).returning();
-      charge = inserted[0] ?? (await db.select().from(charges).where(and(eq(charges.organizationId, context.tenant.organizationId), eq(charges.tenantId, context.tenant.id), eq(charges.leaseId, context.lease.id), eq(charges.periodStart, periodStart))).limit(1))[0];
-    }
+    charge = await ensureCurrentCharge(db, context, periodStart);
   }
   if (!charge) throw new Error('Unable to create rent charge.');
   if (charge.status === 'PAID') return { kind: 'paid' as const, charge };
@@ -130,6 +133,8 @@ export async function createTenantCheckoutSession(db: Db, userId: string, charge
 }
 
 export async function listTenantCharges(db: Db, userId: string) {
+  const context = await currentTenantLease(db, userId);
+  if (context) await ensureCurrentCharge(db, context);
   const rows = await db.select({ charge: charges, lease: leases, property: properties, unit: units })
     .from(charges)
     .innerJoin(tenants, eq(tenants.id, charges.tenantId))
