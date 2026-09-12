@@ -16,6 +16,8 @@ pnpm test
 pnpm build
 ```
 
+`pnpm build` runs database migrations when `DATABASE_URL` is available, then typechecks and lints the project. Without `DATABASE_URL`, local builds skip migrations and still validate the source; production builds must provide `DATABASE_URL`, so migrations are applied before completion.
+
 Never commit `.env` or credentials. The seed command is intended for a development database only.
 
 ## Architecture
