@@ -221,6 +221,25 @@ export const sessions = pgTable('sessions', {
   index('sessions_expires_at_idx').on(table.expiresAt),
 ]);
 
+export const importHistory = pgTable('import_history', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  initiatedByUserId: uuid('initiated_by_user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  fileName: text('file_name').notNull(),
+  rowsProcessed: integer('rows_processed').notNull().default(0),
+  createdCount: integer('created_count').notNull().default(0),
+  updatedCount: integer('updated_count').notNull().default(0),
+  skippedCount: integer('skipped_count').notNull().default(0),
+  failedCount: integer('failed_count').notNull().default(0),
+  reviewCount: integer('review_count').notNull().default(0),
+  status: text('status').notNull(),
+  summary: text('summary'),
+  ...timestamps,
+}, (table) => [
+  index('import_history_organization_id_idx').on(table.organizationId),
+  index('import_history_created_at_idx').on(table.createdAt),
+]);
+
 export const schema = {
   organizations,
   users,
@@ -234,6 +253,7 @@ export const schema = {
   documents,
   uploads,
   sessions,
+  importHistory,
 };
 
 export type Upload = typeof uploads.$inferSelect;
@@ -248,3 +268,4 @@ export type MaintenanceRequest = typeof maintenanceRequests.$inferSelect;
 export type MaintenanceComment = typeof maintenanceComments.$inferSelect;
 export type Document = typeof documents.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
+export type ImportHistory = typeof importHistory.$inferSelect;

@@ -1,6 +1,8 @@
 import 'dotenv/config';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import express, { type NextFunction, type Request, type Response } from 'express';
+import multer from 'multer';
 import { z } from 'zod';
 import { and, asc, desc, eq, or } from 'drizzle-orm';
 import Stripe from 'stripe';
@@ -14,6 +16,7 @@ import { leaseCreateInput, propertyCreateInput, propertyUpdateInput, tenantCreat
 import { getTenantContext, getTenantDocuments, tenantDashboard } from './tenant/queries.js';
 import { tenantMaintenanceInput, tenantProfileUpdateInput } from './tenant/validation.js';
 import { applyStripeChargeEvent, createTenantCheckoutSession, listOrganizationCharges, listTenantCharges, stripe } from './payments/service.js';
+import { IMPORT_MAX_BYTES, commitImport, errorReportCsv, listImportHistory, normalizeRows, parseSpreadsheet, previewImport, suggestMapping, type ColumnMapping, type PreviewRecord } from './importer/service.js';
 
 const loginInput = z.object({ email: z.string().trim().email(), password: z.string().min(1) }).strict();
 const idInput = z.string().uuid();
@@ -22,6 +25,8 @@ const maintenanceStatusInput = z.object({ status: z.enum(['OPEN', 'IN_PROGRESS',
 const maintenanceFilterInput = z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']);
 const tenantChargeCheckoutInput = z.object({ chargeId: z.string().uuid().optional() }).strict();
 const chargeStatusInput = z.enum(['DUE', 'OPEN', 'PAID', 'FAILED', 'VOID']);
+const importerUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: IMPORT_MAX_BYTES, files: 1 } });
+const pendingImports = new Map<string, { organizationId: string; userId: string; fileName: string; headers: string[]; rows: Record<string, string>[]; mapping: ColumnMapping; preview: PreviewRecord[]; createdAt: number }>();
 type AuthenticatedRequest = Request & { authUser: NonNullable<Awaited<ReturnType<typeof getUserForSession>>> };
 
 function readCookie(req: Request, name: string) {
@@ -38,6 +43,9 @@ function sendAuthError(error: unknown, res: Response, next: NextFunction) {
 }
 function isUniqueViolation(error: unknown): error is { code: string } {
   return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === '23505';
+}
+function importCounts(records: PreviewRecord[]) {
+  return { rows: records.length, properties: new Set(records.filter((record) => record.property).map((record) => record.property!.name.toLowerCase())).size, units: new Set(records.filter((record) => record.unit).map((record) => record.unit!.unitNumber.toLowerCase())).size, tenants: new Set(records.filter((record) => record.tenant).map((record) => record.tenant!.email || `${record.tenant!.firstName} ${record.tenant!.lastName}`)).size, leases: records.filter((record) => record.lease).length, new: records.filter((record) => record.classification === 'NEW').length, existing: records.filter((record) => record.classification === 'EXISTING').length, updates: records.filter((record) => record.classification === 'UPDATE').length, review: records.filter((record) => record.classification === 'REVIEW').length, skipped: records.filter((record) => record.classification === 'SKIP').length };
 }
 
 export function createApp(databaseUrl?: string) {
@@ -104,6 +112,39 @@ export function createApp(databaseUrl?: string) {
   const requireManager = (req: Request, res: Response, next: NextFunction) => { try { requireRole((req as AuthenticatedRequest).authUser, 'MANAGER'); return next(); } catch (error) { return sendAuthError(error, res, next); } };
   const requireTenant = (req: Request, res: Response, next: NextFunction) => { try { requireRole((req as AuthenticatedRequest).authUser, 'TENANT'); return next(); } catch (error) { return sendAuthError(error, res, next); } };
   const requireAnyAuth = (req: Request, res: Response, next: NextFunction) => { try { requireAuthenticated((req as AuthenticatedRequest).authUser); return next(); } catch (error) { return sendAuthError(error, res, next); } };
+
+  app.post('/admin/imports/upload', requireManagement, importerUpload.single('file'), async (req, res, next) => {
+    try {
+      const file = req.file;
+      if (!file) return res.status(400).json({ error: 'Choose a CSV, XLSX, or XLS file.' });
+      const parsed = parseSpreadsheet(file.buffer, file.originalname);
+      const suggested = suggestMapping(parsed.headers);
+      const preview = await previewImport(db, (req as AuthenticatedRequest).authUser.organizationId, normalizeRows(parsed.rows, suggested.mapping));
+      const token = randomUUID();
+      pendingImports.set(token, { organizationId: (req as AuthenticatedRequest).authUser.organizationId, userId: (req as AuthenticatedRequest).authUser.id, fileName: file.originalname, headers: parsed.headers, rows: parsed.rows, mapping: suggested.mapping, preview, createdAt: Date.now() });
+      return res.status(201).json({ token, fileName: file.originalname, fileSize: file.size, sheets: parsed.sheets, headers: parsed.headers, mapping: suggested.mapping, suggestions: suggested.suggestions, preview, counts: importCounts(preview) });
+    } catch (error) { return next(error); }
+  });
+  app.post('/admin/imports/preview', requireManagement, async (req, res, next) => {
+    try {
+      const input = z.object({ token: z.string().uuid(), mapping: z.record(z.string(), z.string()) }).strict().parse(req.body);
+      const draft = pendingImports.get(input.token); const user = (req as AuthenticatedRequest).authUser;
+      if (!draft || draft.organizationId !== user.organizationId || draft.userId !== user.id || Date.now() - draft.createdAt > 30 * 60 * 1000) return res.status(404).json({ error: 'Import preview expired. Upload the file again.' });
+      draft.mapping = input.mapping; draft.preview = await previewImport(db, user.organizationId, normalizeRows(draft.rows, draft.mapping));
+      return res.json({ preview: draft.preview, counts: importCounts(draft.preview), mapping: draft.mapping });
+    } catch (error) { return next(error); }
+  });
+  app.post('/admin/imports/confirm', requireManagement, async (req, res, next) => {
+    try {
+      const input = z.object({ token: z.string().uuid(), skipRows: z.array(z.number().int().positive()).default([]) }).strict().parse(req.body);
+      const draft = pendingImports.get(input.token); const user = (req as AuthenticatedRequest).authUser;
+      if (!draft || draft.organizationId !== user.organizationId || draft.userId !== user.id || Date.now() - draft.createdAt > 30 * 60 * 1000) return res.status(404).json({ error: 'Import preview expired. Upload the file again.' });
+      draft.preview = draft.preview.map((record) => input.skipRows.includes(record.rowNumber) ? { ...record, classification: 'SKIP' } : record);
+      const result = await commitImport(db, user.organizationId, user.id, draft.fileName, draft.preview); pendingImports.delete(input.token); return res.json({ result });
+    } catch (error) { return next(error); }
+  });
+  app.get('/admin/imports/history', requireManagement, async (req, res, next) => { try { return res.json(await listImportHistory(db, (req as AuthenticatedRequest).authUser.organizationId)); } catch (error) { return next(error); } });
+  app.get('/admin/imports/report/:token', requireManagement, (req, res, next) => { try { const token = idInput.parse(req.params.token); const draft = pendingImports.get(token); const user = (req as AuthenticatedRequest).authUser; if (!draft || draft.organizationId !== user.organizationId) return res.status(404).send('Import report not found.'); res.type('text/csv').setHeader('Content-Disposition', `attachment; filename="import-review-${token}.csv"`).send(errorReportCsv(draft.preview)); } catch (error) { return next(error); } });
 
   app.post('/logout', requireAnyAuth, async (req, res, next) => {
     try {

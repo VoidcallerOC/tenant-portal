@@ -17,12 +17,15 @@
     "dotenv": "^16.5.0",
     "drizzle-orm": "^0.44.2",
     "express": "^5.1.0",
+    "multer": "^2.3.0",
     "pg": "^8.16.0",
     "stripe": "^22.6.2",
+    "xlsx": "^0.18.5",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/express": "^5.0.1",
+    "@types/multer": "^2.2.0",
     "@types/node": "^22.15.21",
     "@types/pg": "^8.15.4",
     "drizzle-kit": "^0.31.4",

@@ -244,3 +244,20 @@ html[data-theme="dark"] .late-charge td small { color: #e0b15a; }
   .section-head button { margin-top: 15px; }
   .panel { padding: 18px; }
 }
+
+.import-step { margin-bottom: 20px; }
+.import-step h2 { margin-top: 0; }
+#import-upload-form { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+#import-upload-form input[type=file] { border: 1px dashed var(--line); border-radius: var(--radius-sm); padding: 14px; background: var(--field); color: var(--ink); }
+.import-mapping { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 18px; }
+.import-mapping label { color: var(--muted); font-size: 12px; font-weight: 700; }
+.import-mapping select { display: block; width: 100%; margin-top: 7px; padding: 11px; border: 1px solid var(--line); border-radius: 7px; color: var(--ink); background: var(--field); }
+.required { color: #a45d13; }
+.import-counts { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0; }
+.import-count { min-width: 82px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--field); }
+.import-count strong, .import-count small { display: block; }
+.import-count strong { font-size: 20px; color: var(--ink); }
+.import-count small { color: var(--muted); margin-top: 3px; }
+#import-preview-list td { vertical-align: top; }
+@media (max-width: 900px) { .import-mapping { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 720px) { .import-mapping { grid-template-columns: 1fr; } #import-upload-form { align-items: stretch; flex-direction: column; } }
